@@ -20,6 +20,14 @@ export function initAdd({ api, load, openModal, closeModal }) {
   $("#btn-save-add")?.addEventListener("click", () => save(false));
   $("#btn-save-check-add")?.addEventListener("click", () => save(true));
 
+  // Ctrl/Cmd+Enter ? ?????
+  $("#modal-add")?.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      save(true);
+    }
+  });
+
   async function save(forceCheck) {
     const payload = {
       name: $("#add-name").value.trim(),
@@ -28,13 +36,13 @@ export function initAdd({ api, load, openModal, closeModal }) {
       notes: $("#add-notes").value.trim(),
       check_after_save: forceCheck || $("#add-check-after").value === "1",
     };
-    if (!payload.base_url || !payload.api_key) return toast("请填写 Base URL 和 API Key");
+    if (!payload.base_url || !payload.api_key) return toast("??? Base URL ? API Key");
     const result = await api("POST", "/api/keys", payload);
     closeModal("modal-add");
     if (payload.check_after_save) {
-      toast(`已添加 · ${formatCheckSummary(result)}`);
+      toast(`??? ? ${formatCheckSummary(result)}`);
     } else {
-      toast("已添加，稍后可手动检测");
+      toast("???????????");
     }
     await load();
   }

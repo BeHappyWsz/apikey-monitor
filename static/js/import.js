@@ -30,16 +30,16 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
   $("#btn-empty-json")?.addEventListener("click", () => openImport(SAMPLE_JSON.trim() + "\n", { jsonHint: true }));
   $("#btn-fill-sample")?.addEventListener("click", () => {
     $("#paste-area").value = SAMPLE_TEXT;
-    toast("已填入文本示例，可直接解析预览");
+    toast("???????????????");
   });
   $("#btn-fill-json-sample")?.addEventListener("click", () => {
     $("#paste-area").value = SAMPLE_JSON.trim() + "\n";
-    toast("已填入 JSON 备份示例，可直接解析预览");
+    toast("??? JSON ????????????");
   });
 
-  $("#btn-parse").addEventListener("click", async () => {
+  async function parsePaste() {
     const text = $("#paste-area").value;
-    if (!text.trim()) return toast("请先粘贴内容");
+    if (!text.trim()) return toast("??????");
     const result = await api("POST", "/api/import/parse", { text });
     state.candidates = (result.candidates || []).map((item) => ({
       name: item.name || "",
@@ -51,6 +51,37 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
     }));
     state.candidateSelected = new Set(state.candidates.map((_, index) => index));
     renderCandidates(state);
+  }
+
+  async function saveCandidates() {
+    const items = [...state.candidateSelected].map((index) => {
+      const candidate = state.candidates[index];
+      return {
+        name: (candidate.name || "").trim(),
+        base_url: (candidate.base_url || "").trim(),
+        api_key: (candidate.api_key || "").trim(),
+        check_model: (candidate.check_model || "").trim(),
+        notes: (candidate.notes || "").trim(),
+      };
+    }).filter((item) => item.base_url && item.api_key);
+    if (!items.length) return toast("?????????");
+    const result = await api("POST", "/api/keys/batch", { items });
+    closeModal("modal-import");
+    toast(formatImportSummary(result));
+    await load();
+    if (result.task) startTask(result.task);
+  }
+
+  $("#btn-parse").addEventListener("click", () => parsePaste());
+  $("#btn-save-cand").addEventListener("click", () => saveCandidates());
+
+  // Ctrl/Cmd+Enter??????????????
+  $("#modal-import")?.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      if (state.candidates.length) saveCandidates();
+      else parsePaste();
+    }
   });
 
   $("#cand-body").addEventListener("change", (event) => {
@@ -84,32 +115,13 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
     candidate.show_key = !candidate.show_key;
     const input = row.querySelector(".cand-key");
     if (input) input.type = candidate.show_key ? "text" : "password";
-    toggle.textContent = candidate.show_key ? "◉" : "◎";
-    toggle.title = candidate.show_key ? "隐藏 API Key" : "显示 API Key";
+    toggle.textContent = candidate.show_key ? "?" : "?";
+    toggle.title = candidate.show_key ? "?? API Key" : "?? API Key";
   });
 
   $("#cand-all").addEventListener("change", (event) => {
     state.candidateSelected = event.target.checked ? new Set(state.candidates.map((_, index) => index)) : new Set();
     renderCandidates(state);
-  });
-
-  $("#btn-save-cand").addEventListener("click", async () => {
-    const items = [...state.candidateSelected].map((index) => {
-      const candidate = state.candidates[index];
-      return {
-        name: (candidate.name || "").trim(),
-        base_url: (candidate.base_url || "").trim(),
-        api_key: (candidate.api_key || "").trim(),
-        check_model: (candidate.check_model || "").trim(),
-        notes: (candidate.notes || "").trim(),
-      };
-    }).filter((item) => item.base_url && item.api_key);
-    if (!items.length) return toast("没有选中的有效候选");
-    const result = await api("POST", "/api/keys/batch", { items });
-    closeModal("modal-import");
-    toast(formatImportSummary(result));
-    await load();
-    if (result.task) startTask(result.task);
   });
 
   function openImport(prefill = "", { jsonHint = false } = {}) {
@@ -118,8 +130,8 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
     $("#paste-area").value = prefill;
     $("#cand-body").innerHTML = "";
     $("#parse-info").textContent = jsonHint
-      ? "可粘贴导出/备份的 JSON（数组或单条对象），也支持环境变量文本"
-      : "";
+      ? "?????/??? JSON???????????????????"
+      : "???Ctrl+Enter ?????????? Ctrl+Enter ????";
     openModal("modal-import");
   }
 
@@ -128,16 +140,16 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
 
 function renderCandidates(state) {
   $("#parse-info").textContent = state.candidates.length
-    ? `解析出 ${state.candidates.length} 条候选（可改名称 / URL / Key / 检测模型）`
-    : "未识别到候选";
+    ? `??? ${state.candidates.length} ???????? / URL / Key / ?????? Ctrl+Enter ??`
+    : "??????";
   $("#cand-body").innerHTML = state.candidates.map((candidate, index) => `<tr data-i="${index}">
     <td><input class="cand-sel" type="checkbox" ${state.candidateSelected.has(index) ? "checked" : ""}></td>
-    <td><input class="cand-name" value="${esc(candidate.name || "")}" placeholder="可选名称"></td>
+    <td><input class="cand-name" value="${esc(candidate.name || "")}" placeholder="????"></td>
     <td><input class="cand-url" value="${esc(candidate.base_url || "")}" placeholder="https://..."></td>
     <td><div class="input-line cand-key-line">
       <input class="cand-key" type="${candidate.show_key ? "text" : "password"}" value="${esc(candidate.api_key || "")}" autocomplete="off">
-      <button class="icon-btn js-cand-toggle" type="button" title="${candidate.show_key ? "隐藏 API Key" : "显示 API Key"}">${candidate.show_key ? "◉" : "◎"}</button>
+      <button class="icon-btn js-cand-toggle" type="button" title="${candidate.show_key ? "?? API Key" : "?? API Key"}">${candidate.show_key ? "?" : "?"}</button>
     </div></td>
-    <td><input class="cand-model" value="${esc(candidate.check_model || "")}" placeholder="可选模型"></td>
+    <td><input class="cand-model" value="${esc(candidate.check_model || "")}" placeholder="????"></td>
   </tr>`).join("");
 }

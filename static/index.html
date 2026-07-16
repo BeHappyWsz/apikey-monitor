@@ -42,11 +42,16 @@
     <div class="toolbar-main">
       <button class="btn primary" id="btn-import">＋ 粘贴导入</button>
       <button class="btn" id="btn-add">＋ 手动添加</button>
-      <button class="btn" id="btn-check">⟳ 批量检测</button>
-      <button class="btn" id="btn-export-selected">⇪ 导出选中</button>
-      <button class="btn" id="btn-backup-all" type="button" title="导出全部为 JSON 备份">💾 备份全部</button>
-      <button class="btn danger" id="btn-delete">🗑 批量删除</button>
-      <button class="btn" id="btn-refresh">↻ 刷新</button>
+      <button class="btn" id="btn-check" type="button" disabled title="请先勾选要检测的项目">⟳ 批量检测</button>
+      <div class="more-menu" id="more-menu">
+        <button class="btn" id="btn-more" type="button" aria-haspopup="true" aria-expanded="false" title="更多操作">⋯ 更多</button>
+        <div class="more-dropdown" id="more-dropdown" hidden role="menu">
+          <button class="more-item" id="btn-export-selected" type="button" role="menuitem" disabled title="请先勾选要导出的项目">⇫ 导出选中</button>
+          <button class="more-item" id="btn-backup-all" type="button" role="menuitem" title="导出全部为 JSON 备份" disabled>💾 备份全部</button>
+          <button class="more-item danger" id="btn-delete" type="button" role="menuitem" disabled title="请先勾选要删除的项目">🗑 批量删除</button>
+          <button class="more-item" id="btn-refresh" type="button" role="menuitem">↻ 刷新</button>
+        </div>
+      </div>
       <label class="select-all"><input type="checkbox" id="sel-all"> 全选</label>
     </div>
     <div class="toolbar-filters">
@@ -56,6 +61,7 @@
         <button class="seg" data-status="down" type="button">离线 <b id="cnt-down">0</b></button>
         <button class="seg" data-status="auth_error" type="button">失效 <b id="cnt-auth">0</b></button>
         <button class="seg" data-status="issue" type="button">异常 <b id="cnt-issue">0</b></button>
+        <button class="seg" data-status="problem" type="button" title="非在线项（离线/失效/异常/未知）">问题 <b id="cnt-problem">0</b></button>
         <button class="seg" data-status="unknown" type="button">未知 <b id="cnt-unknown">0</b></button>
       </div>
       <input type="search" id="filter" class="filter" placeholder="搜索 名称 / base_url / 模型…">
@@ -69,7 +75,7 @@
         <p>按状态、协议、模型与响应延迟快速定位可用配置。</p>
       </div>
     </div>
-    <div class="selection-bar" id="selection-bar"><span id="selection-summary">已选择 0 条</span><div><button class="btn" id="btn-check-mobile">批量检测</button><button class="btn" id="btn-export-mobile">导出选中</button><button class="btn danger" id="btn-delete-mobile">批量删除</button></div></div>
+    <div class="selection-bar" id="selection-bar"><span id="selection-summary">已选择 0 条</span><div><button class="btn" id="btn-check-mobile" type="button" disabled>批量检测</button><button class="btn" id="btn-export-mobile" type="button" disabled>导出选中</button><button class="btn danger" id="btn-delete-mobile" type="button" disabled>批量删除</button></div></div>
     <div class="key-list" id="key-list" aria-live="polite"></div>
     <div class="empty" id="empty" hidden>
       <div class="empty-badge">FIRST RUN</div>
@@ -256,6 +262,10 @@
     </div>
     <div class="progress-track"><div id="task-progress-bar"></div></div>
     <p id="task-message" class="hint"></p>
+    <div class="modal-foot" id="task-foot" hidden>
+      <button class="btn soft" id="btn-task-problems" type="button">只看问题项</button>
+      <button class="btn primary" type="button" data-close>关闭</button>
+    </div>
   </div>
 </div>
 
@@ -300,6 +310,7 @@
         <option value="json">JSON</option>
       </select>
       <button class="btn soft" id="btn-copy" type="button">⧉ 复制</button>
+      <button class="btn" id="btn-download" type="button" title="下载为文件">⬇ 下载</button>
     </div>
     <p class="hint export-meta" id="exp-meta"></p>
     <textarea id="exp-text" rows="8" readonly></textarea>

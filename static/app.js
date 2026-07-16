@@ -6,7 +6,10 @@ import { initImport } from "./js/import.js";
 import { initAdd } from "./js/add.js";
 import { initEditor } from "./js/editor.js";
 import { initSettings } from "./js/settings.js";
-import { $, $$, copyText, esc, formatCheckSummary, maskKey, relativeTime, statusLabel, toast } from "./js/utils.js";
+import { $, $$, copyText, downloadText, esc, exportFilename, formatCheckSummary, maskKey, relativeTime, statusLabel, toast } from "./js/utils.js";
+
+const EXPORT_FMT_KEY = "apikeyconfig.exportFmt";
+const EXPORT_FMTS = ["claude", "codex", "env", "powershell", "json"];
 
 const state = {
   keys: [], selected: new Set(), status: "all", query: "", loading: true, loadError: "",
@@ -19,7 +22,7 @@ async function api(method, path, body, options) {
   try {
     return (await request(method, path, body, options)).payload;
   } catch (error) {
-    if (error.name !== "AbortError") toast(error.message || "请求失败", 4200);
+    if (error.name !== "AbortError") toast(error.message || "????", 4200);
     throw error;
   }
 }
@@ -91,7 +94,7 @@ function render({ preserveUi = false } = {}) {
     return;
   }
   if (state.loadError) {
-    list.innerHTML = `<div class="inline-state error-state"><b>列表加载失败</b><span>${esc(state.loadError)}</span><button class="btn" id="btn-inline-retry">重试</button></div>`;
+    list.innerHTML = `<div class="inline-state error-state"><b>??????</b><span>${esc(state.loadError)}</span><button class="btn" id="btn-inline-retry">??</button></div>`;
     empty.hidden = true;
     $("#btn-inline-retry")?.addEventListener("click", () => load());
     renderSelection();
@@ -101,16 +104,16 @@ function render({ preserveUi = false } = {}) {
   list.innerHTML = rows.map(card).join("");
   if (!state.keys.length) {
     empty.hidden = false;
-    empty.querySelector(".empty-title").textContent = "还没有 Key";
-    if (empty.querySelector(".empty-desc")) empty.querySelector(".empty-desc").textContent = "三步开始：粘贴配置 → 预览确认 → 自动检测。支持环境变量 / curl / JSON 备份，也可手动添加。";
-      const steps = empty.querySelector(".empty-steps"); if (steps) steps.hidden = false;
-      const hint = empty.querySelector(".empty-hint"); if (hint) hint.hidden = false;
-      const badge = empty.querySelector(".empty-badge"); if (badge) badge.hidden = false;
+    empty.querySelector(".empty-title").textContent = "??? Key";
+    if (empty.querySelector(".empty-desc")) empty.querySelector(".empty-desc").textContent = "????????? ? ???? ? ??????????? / curl / JSON ??????????";
+    const steps = empty.querySelector(".empty-steps"); if (steps) steps.hidden = false;
+    const hint = empty.querySelector(".empty-hint"); if (hint) hint.hidden = false;
+    const badge = empty.querySelector(".empty-badge"); if (badge) badge.hidden = false;
     empty.querySelector(".empty-actions").hidden = false;
   } else if (!rows.length) {
     empty.hidden = false;
-    empty.querySelector(".empty-title").textContent = "当前筛选没有结果";
-    if (empty.querySelector(".empty-desc")) empty.querySelector(".empty-desc").textContent = "试试切换状态筛选，或清空搜索关键字。";
+    empty.querySelector(".empty-title").textContent = "????????";
+    if (empty.querySelector(".empty-desc")) empty.querySelector(".empty-desc").textContent = "??????????????????";
     empty.querySelector(".empty-actions").hidden = true;
     const steps = empty.querySelector(".empty-steps"); if (steps) steps.hidden = true;
     const hint = empty.querySelector(".empty-hint"); if (hint) hint.hidden = true;
@@ -132,57 +135,80 @@ function card(key) {
   const sortable = canReorder(state.status, state.query);
   return `<article class="key-card status-${tone}" data-id="${key.id}" ${sortable ? 'draggable="true"' : ""}>
     <header class="card-head">
-      <div class="card-title"><button class="drag-handle" type="button" ${sortable ? "" : "disabled"} title="拖拽排序" aria-label="拖拽排序">☰</button><input class="row-sel" type="checkbox" ${state.selected.has(key.id) ? "checked" : ""} aria-label="选择 ${esc(key.name || key.base_url)}"><div><h3>${esc(key.name || "未命名 Key")}</h3><button class="url-copy js-copy-url" type="button">${esc(key.base_url)} <span>⧉</span></button></div></div>
+      <div class="card-title"><button class="drag-handle" type="button" ${sortable ? "" : "disabled"} title="????" aria-label="????">?</button><input class="row-sel" type="checkbox" ${state.selected.has(key.id) ? "checked" : ""} aria-label="?? ${esc(key.name || key.base_url)}"><div><h3>${esc(key.name || "??? Key")}</h3><button class="url-copy js-copy-url" type="button">${esc(key.base_url)} <span>?</span></button></div></div>
       <div class="status-panel">
-        <span class="status-main ${tone}"><i class="dot ${tone}"></i>${busy ? "检测中" : statusLabel[status] || "未知"}</span>
-        <span class="status-meta"><b>${key.latency_ms == null ? "—" : `${key.latency_ms}ms`}</b><small>延迟</small></span>
-        <span class="status-meta"><b>${relativeTime(key.last_check_at)}</b><small>最近检测</small></span>
+        <span class="status-main ${tone}"><i class="dot ${tone}"></i>${busy ? "???" : statusLabel[status] || "??"}</span>
+        <span class="status-meta"><b>${key.latency_ms == null ? "?" : `${key.latency_ms}ms`}</b><small>??</small></span>
+        <span class="status-meta"><b>${relativeTime(key.last_check_at)}</b><small>????</small></span>
       </div>
     </header>
     <div class="card-body-grid">
-      <div class="metric primary-metric"><span>API Key</span><b class="key-mask-line"><span>${esc(key.api_key_masked || maskKey(key.api_key))}</span><button class="link-btn js-copy-key" type="button" title="复制完整 API Key">复制</button></b></div>
-      <div class="metric"><span>协议能力</span><b>${protocols.length ? protocols.map((item) => `<em>${item}</em>`).join(" ") : "待检测"}</b></div>
-      <div class="metric wide-metric"><span>模型检测</span><b class="model-state ${modelState.replace(/_/g, "-")}">${esc(key.check_model || "未设置")} · ${statusLabel[modelState] || "未知"}</b></div>
+      <div class="metric primary-metric"><span>API Key</span><b class="key-mask-line"><span>${esc(key.api_key_masked || maskKey(key.api_key))}</span><button class="link-btn js-copy-key" type="button" title="???? API Key">??</button></b></div>
+      <div class="metric"><span>????</span><b>${protocols.length ? protocols.map((item) => `<em>${item}</em>`).join(" ") : "???"}</b></div>
+      <div class="metric wide-metric"><span>????</span><b class="model-state ${modelState.replace(/_/g, "-")}">${esc(key.check_model || "???")} ? ${statusLabel[modelState] || "??"}</b></div>
     </div>
-    <details class="card-details"><summary>模型、备注与错误详情</summary><div><p><b>模型：</b>${models.length ? models.slice(0, 8).map((model) => `<span class="chip">${esc(model)}</span>`).join(" ") : "暂无"} ${models.length > 8 ? `<button class="link-btn js-models">查看全部 ${models.length}</button>` : ""}</p>${key.notes ? `<p><b>备注：</b>${esc(key.notes)}</p>` : ""}${key.last_error ? `<p class="error-line"><b>错误：</b>${esc(key.last_error)}</p>` : ""}${key.model_last_error ? `<p class="error-line"><b>模型错误：</b>${esc(key.model_last_error)}</p>` : ""}</div></details>
-    <footer class="card-actions"><label class="monitor-toggle"><input class="row-mon" type="checkbox" ${key.monitor_enabled ? "checked" : ""}>监测</label><button class="btn soft js-check" ${busy ? "disabled" : ""}>${busy ? "检测中…" : "检测"}</button><button class="btn ghost js-check-model">模型检测</button><button class="btn ghost js-edit">编辑</button><button class="btn ghost js-export">导出</button><button class="btn danger-soft js-del">删除</button></footer>
+    <details class="card-details"><summary>??????????</summary><div><p><b>???</b>${models.length ? models.slice(0, 8).map((model) => `<span class="chip">${esc(model)}</span>`).join(" ") : "??"} ${models.length > 8 ? `<button class="link-btn js-models">???? ${models.length}</button>` : ""}</p>${key.notes ? `<p><b>???</b>${esc(key.notes)}</p>` : ""}${key.last_error ? `<p class="error-line"><b>???</b>${esc(key.last_error)}</p>` : ""}${key.model_last_error ? `<p class="error-line"><b>?????</b>${esc(key.model_last_error)}</p>` : ""}</div></details>
+    <footer class="card-actions"><label class="monitor-toggle"><input class="row-mon" type="checkbox" ${key.monitor_enabled ? "checked" : ""}>??</label><button class="btn soft js-check" ${busy ? "disabled" : ""}>${busy ? "????" : "??"}</button><button class="btn ghost js-check-model">????</button><button class="btn ghost js-edit">??</button><button class="btn ghost js-export">??</button><button class="btn ghost js-copy-codex" type="button" title="???? Codex ??">Codex</button><button class="btn ghost js-copy-claude" type="button" title="???? Claude ??">Claude</button><button class="btn danger-soft js-del">??</button></footer>
   </article>`;
 }
 
-function renderStats() {
-  const counts = { total: state.keys.length, up: 0, down: 0, auth_error: 0, issue: 0, unknown: 0 };
-  let latencySum = 0, latencyN = 0;
+function countStatuses() {
+  const counts = { all: state.keys.length, up: 0, down: 0, auth_error: 0, issue: 0, problem: 0, unknown: 0 };
   state.keys.forEach((key) => {
     const status = key.status || "unknown";
     if (status === "up") counts.up++;
-    else if (status === "down") counts.down++;
-    else if (status === "auth_error") counts.auth_error++;
-    else if (status === "rate_limited" || status === "degraded") counts.issue++;
-    else counts.unknown++;
+    else if (status === "down") { counts.down++; counts.problem++; }
+    else if (status === "auth_error") { counts.auth_error++; counts.problem++; }
+    else if (status === "rate_limited" || status === "degraded") { counts.issue++; counts.problem++; }
+    else { counts.unknown++; counts.problem++; }
+  });
+  return counts;
+}
+
+function renderStats() {
+  const counts = countStatuses();
+  let latencySum = 0, latencyN = 0;
+  state.keys.forEach((key) => {
     if (key.latency_ms != null) { latencySum += key.latency_ms; latencyN++; }
   });
-  $("#st-total").textContent = counts.total;
+  $("#st-total").textContent = counts.all;
   $("#st-up").textContent = counts.up;
   $("#st-down").textContent = counts.down;
   $("#st-auth").textContent = counts.auth_error;
   $("#st-issue").textContent = counts.issue;
-  $("#st-avg").textContent = latencyN ? `${Math.round(latencySum / latencyN)}ms` : "—";
+  $("#st-avg").textContent = latencyN ? `${Math.round(latencySum / latencyN)}ms` : "?";
 }
 
 function renderFilterCounts() {
-  const counts = { all: state.keys.length, up: 0, down: 0, auth_error: 0, issue: 0, unknown: 0 };
-  state.keys.forEach((key) => {
-    const status = key.status || "unknown";
-    if (status === "up") counts.up++;
-    else if (status === "down") counts.down++;
-    else if (status === "auth_error") counts.auth_error++;
-    else if (status === "rate_limited" || status === "degraded") counts.issue++;
-    else counts.unknown++;
-  });
-  for (const [key, id] of Object.entries({ all: "cnt-all", up: "cnt-up", down: "cnt-down", auth_error: "cnt-auth", issue: "cnt-issue", unknown: "cnt-unknown" })) {
-    $("#" + id).textContent = counts[key];
+  const counts = countStatuses();
+  for (const [key, id] of Object.entries({
+    all: "cnt-all", up: "cnt-up", down: "cnt-down", auth_error: "cnt-auth",
+    issue: "cnt-issue", problem: "cnt-problem", unknown: "cnt-unknown",
+  })) {
+    const el = $("#" + id);
+    if (el) el.textContent = counts[key];
   }
   $$(".seg").forEach((button) => button.classList.toggle("active", button.dataset.status === state.status));
+}
+
+function setBtnDisabled(el, disabled, titleWhenDisabled) {
+  if (!el) return;
+  if (!el.dataset.titleBase) el.dataset.titleBase = el.getAttribute("title") || "";
+  el.disabled = !!disabled;
+  if (disabled && titleWhenDisabled) el.title = titleWhenDisabled;
+  else el.title = el.dataset.titleBase || "";
+}
+
+function updateBatchActions() {
+  const hasSel = state.selected.size > 0;
+  const hasKeys = state.keys.length > 0;
+  setBtnDisabled($("#btn-check"), !hasSel, "??????????");
+  setBtnDisabled($("#btn-export-selected"), !hasSel, "??????????");
+  setBtnDisabled($("#btn-delete"), !hasSel, "??????????");
+  setBtnDisabled($("#btn-check-mobile"), !hasSel, "??????????");
+  setBtnDisabled($("#btn-export-mobile"), !hasSel, "??????????");
+  setBtnDisabled($("#btn-delete-mobile"), !hasSel, "??????????");
+  setBtnDisabled($("#btn-backup-all"), !hasKeys, "??????? Key");
 }
 
 function renderSelection(rows = getVisibleKeys(state.keys, state.status, state.query)) {
@@ -190,11 +216,57 @@ function renderSelection(rows = getVisibleKeys(state.keys, state.status, state.q
   const bar = $("#selection-bar");
   $("#sel-all").checked = rows.length > 0 && summary.visible === rows.length;
   $("#sel-all").indeterminate = summary.visible > 0 && summary.visible < rows.length;
-  $("#selection-summary").textContent = `已选择 ${summary.total} 条（当前结果共 ${summary.resultTotal} 条${summary.hidden ? `，隐藏选择 ${summary.hidden} 条` : ""}）`;
+  $("#selection-summary").textContent = `??? ${summary.total} ??????? ${summary.resultTotal} ?${summary.hidden ? `????? ${summary.hidden} ?` : ""}?`;
   bar.classList.toggle("active", summary.total > 0);
+  updateBatchActions();
 }
 
-const taskController = createTaskController({ api, load, openModal });
+function readSavedExportFmt() {
+  try {
+    const saved = localStorage.getItem(EXPORT_FMT_KEY);
+    if (saved && EXPORT_FMTS.includes(saved)) return saved;
+  } catch { /* ignore */ }
+  return "claude";
+}
+
+function saveExportFmt(fmt) {
+  try {
+    if (EXPORT_FMTS.includes(fmt)) localStorage.setItem(EXPORT_FMT_KEY, fmt);
+  } catch { /* ignore */ }
+}
+
+function closeMoreMenu() {
+  const menu = $("#more-dropdown");
+  const btn = $("#btn-more");
+  if (!menu || menu.hidden) return;
+  menu.hidden = true;
+  if (btn) btn.setAttribute("aria-expanded", "false");
+}
+
+function toggleMoreMenu() {
+  const menu = $("#more-dropdown");
+  const btn = $("#btn-more");
+  if (!menu) return;
+  const next = !menu.hidden;
+  menu.hidden = next;
+  if (btn) btn.setAttribute("aria-expanded", next ? "false" : "true");
+}
+
+const taskController = createTaskController({
+  api,
+  load,
+  openModal,
+  closeModal,
+  onTaskDone: ({ filter } = {}) => {
+    if (filter) {
+      state.status = filter;
+      state.query = "";
+      if ($("#filter")) $("#filter").value = "";
+      render();
+      toast("????????????", 2800);
+    }
+  },
+});
 const editor = initEditor({ api, state, load, openModal, closeModal });
 initDialogs();
 initImport({ api, state, load, openModal, closeModal, startTask: taskController.startTask });
@@ -210,15 +282,23 @@ $("#status-filter").addEventListener("click", (event) => {
   const button = event.target.closest(".seg");
   if (button) { state.status = button.dataset.status; render(); }
 });
-$("#btn-refresh").addEventListener("click", () => load());
+$("#btn-refresh").addEventListener("click", () => { closeMoreMenu(); load(); });
+$("#btn-more")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleMoreMenu();
+});
+document.addEventListener("click", (event) => {
+  if (!event.target.closest?.("#more-menu")) closeMoreMenu();
+});
 $("#btn-backup-all")?.addEventListener("click", async () => {
-  if (!state.keys.length) return toast("还没有可备份的 Key");
+  closeMoreMenu();
+  if (!state.keys.length) return toast("??????? Key");
   const result = await api("GET", "/api/keys/export_all");
   state.exportId = null;
   state.exportMode = "backup";
   $("#exp-fmt").value = "json";
   $("#exp-fmt").disabled = true;
-  $("#exp-meta").textContent = `全部备份 · ${result.count || state.keys.length} 条 JSON`;
+  $("#exp-meta").textContent = `???? ? ${result.count || state.keys.length} ? JSON`;
   $("#exp-text").value = result.text || "";
   openModal("modal-export");
 });
@@ -232,16 +312,19 @@ $("#key-list").addEventListener("click", async (event) => {
   if (event.target.closest(".js-copy-key")) {
     try {
       const secret = await api("GET", `/api/keys/${id}/secret`);
-      if (!secret.api_key) return toast("当前没有可复制的 API Key");
+      if (!secret.api_key) return toast("???????? API Key");
       return copyText(secret.api_key, "API Key");
     } catch { return; }
   }
+  if (event.target.closest(".js-copy-codex")) return quickCopyExport(id, "codex", "Codex ??");
+  if (event.target.closest(".js-copy-claude")) return quickCopyExport(id, "claude", "Claude ??");
   if (event.target.closest(".js-edit")) return editor.openEdit(key);
   if (event.target.closest(".js-models")) return openModels(key);
   if (event.target.closest(".js-export")) {
     state.exportId = id;
     state.exportMode = "single";
     $("#exp-fmt").disabled = false;
+    $("#exp-fmt").value = readSavedExportFmt();
     $("#exp-meta").textContent = key.name || key.base_url;
     openModal("modal-export");
     return updateExport();
@@ -295,7 +378,7 @@ $("#key-list").addEventListener("drop", async (event) => {
   render();
   try {
     await api("POST", "/api/keys/reorder", { ids: state.keys.map((key) => key.id) });
-    toast("顺序已保存");
+    toast("?????");
   } catch {
     state.keys = previous;
     state.fingerprint = keysFingerprint(state.keys);
@@ -311,42 +394,43 @@ function clearDragState() {
 }
 
 $("#btn-check").addEventListener("click", async () => {
-  if (!state.selected.size) return toast("请先选择要检测的项目");
+  if (!state.selected.size) return toast("??????????");
   taskController.startTask(await api("POST", "/api/keys/batch_check", { ids: [...state.selected] }));
 });
 $("#btn-check-mobile").addEventListener("click", () => $("#btn-check").click());
 $("#btn-delete-mobile").addEventListener("click", () => $("#btn-delete").click());
 $("#btn-export-mobile")?.addEventListener("click", () => $("#btn-export-selected").click());
-$("#btn-export-selected").addEventListener("click", exportSelected);
+$("#btn-export-selected").addEventListener("click", () => { closeMoreMenu(); exportSelected(); });
 $("#btn-delete").addEventListener("click", async () => {
+  closeMoreMenu();
   const rows = getVisibleKeys(state.keys, state.status, state.query);
   const summary = selectionSummary(state.selected, rows);
-  if (!summary.total) return toast("请先选择要删除的项目");
-  if (!confirm(`确认删除 ${summary.total} 条？${summary.hidden ? `其中 ${summary.hidden} 条当前不可见。` : ""}`)) return;
+  if (!summary.total) return toast("??????????");
+  if (!confirm(`???? ${summary.total} ??${summary.hidden ? `?? ${summary.hidden} ???????` : ""}`)) return;
   const result = await api("POST", "/api/keys/batch_delete", { ids: [...state.selected] });
   state.selected.clear();
-  toast(`已删除 ${result.deleted} 条`);
+  toast(`??? ${result.deleted} ?`);
   await load();
 });
 
 function openModels(key) {
   state.modelId = key.id;
-  $("#model-summary").textContent = `${key.name || key.base_url}：共 ${(key.models || []).length} 个模型`;
-  $("#model-list").innerHTML = (key.models || []).map((model) => `<div class="model-row"><span>${esc(model)}</span><button class="link-btn js-set-check-model" data-model="${esc(model)}">设为检测模型</button></div>`).join("") || "暂无模型";
+  $("#model-summary").textContent = `${key.name || key.base_url}?? ${(key.models || []).length} ???`;
+  $("#model-list").innerHTML = (key.models || []).map((model) => `<div class="model-row"><span>${esc(model)}</span><button class="link-btn js-set-check-model" data-model="${esc(model)}">??????</button></div>`).join("") || "????";
   openModal("modal-models");
 }
 
 async function deleteOne(key) {
-  if (!confirm(`确认删除“${key.name || key.base_url}”？`)) return;
+  if (!confirm(`?????${key.name || key.base_url}??`)) return;
   await api("DELETE", `/api/keys/${key.id}`);
   state.selected.delete(key.id);
-  toast("已删除");
+  toast("???");
   await load();
 }
 
 async function checkOne(key, modelOnly) {
   if (modelOnly && !key.check_model) {
-    toast("请先设置检测模型");
+    toast("????????");
     return editor.openEdit(key);
   }
   state.checking.add(key.id);
@@ -360,27 +444,58 @@ async function checkOne(key, modelOnly) {
   }
 }
 
+async function quickCopyExport(id, fmt, label) {
+  try {
+    const result = await api("GET", `/api/keys/${id}/export?fmt=${fmt}`);
+    if (!result?.text) return toast("??????");
+    saveExportFmt(fmt);
+    await copyText(result.text, label);
+  } catch { /* toasted by api */ }
+}
+
 async function exportSelected() {
-  if (!state.selected.size) return toast("请先选择要导出的项目");
+  if (!state.selected.size) return toast("??????????");
   state.exportMode = "batch";
   state.exportId = null;
   $("#exp-fmt").value = "json";
   $("#exp-fmt").disabled = true;
-  $("#exp-meta").textContent = `批量 JSON · ${state.selected.size} 条`;
+  $("#exp-meta").textContent = `?? JSON ? ${state.selected.size} ?`;
   openModal("modal-export");
   const result = await api("POST", "/api/keys/batch_export", { ids: [...state.selected], fmt: "json" });
   $("#exp-text").value = result.text || "";
 }
 
 async function updateExport() {
-  if (state.exportMode === "batch") return;
+  if (state.exportMode === "batch" || state.exportMode === "backup") return;
   if (!state.exportId) return;
-  const result = await api("GET", `/api/keys/${state.exportId}/export?fmt=${$("#exp-fmt").value}`);
+  const fmt = $("#exp-fmt").value;
+  saveExportFmt(fmt);
+  const result = await api("GET", `/api/keys/${state.exportId}/export?fmt=${fmt}`);
   $("#exp-text").value = result.text || "";
 }
 
+function downloadCurrentExport() {
+  const text = $("#exp-text").value;
+  if (!String(text || "").trim()) return toast("????????");
+  let fmt = "json";
+  let prefix = "apikey-export";
+  if (state.exportMode === "backup") {
+    fmt = "json";
+    prefix = "apikey-backup";
+  } else if (state.exportMode === "batch") {
+    fmt = "json";
+    prefix = "apikey-batch";
+  } else {
+    fmt = $("#exp-fmt").value || "json";
+    prefix = `apikey-${fmt}`;
+  }
+  downloadText(exportFilename(fmt, prefix), text);
+  toast("?????");
+}
+
 $("#exp-fmt").addEventListener("change", updateExport);
-$("#btn-copy").addEventListener("click", () => copyText($("#exp-text").value, "配置"));
+$("#btn-copy").addEventListener("click", () => copyText($("#exp-text").value, "??"));
+$("#btn-download")?.addEventListener("click", downloadCurrentExport);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load({ silent: true }); });
 setInterval(() => { if (!document.hidden && !$(".modal.open")) load({ silent: true }).catch(() => {}); }, 5000);
 

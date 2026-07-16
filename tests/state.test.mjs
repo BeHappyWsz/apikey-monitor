@@ -18,3 +18,6 @@ test("fingerprint changes with status",()=>{
   const b=keysFingerprint([{id:1,status:"down",latency_ms:1}]);
   assert.notEqual(a,b);
 });
+const problemKeys=[{id:1,status:"up",name:"U"},{id:2,status:"down",name:"D"},{id:3,status:"auth_error",name:"A"},{id:4,status:"unknown",name:"N"},{id:5,status:"rate_limited",name:"R"}];
+test("problem filtering",()=>assert.deepEqual(getVisibleKeys(problemKeys,"problem","").map(k=>k.id),[2,3,4,5]));
+

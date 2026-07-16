@@ -113,6 +113,16 @@ body {
 .btn.ghost { background: transparent; }
 .btn.soft { background: rgba(22,119,255,.08); border-color: rgba(22,119,255,.20); color: var(--accent); }
 .btn.pill { border-radius: 999px; padding-inline: 16px; }
+.btn:disabled, .btn[disabled] {
+  opacity: .48;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none;
+}
+.btn:disabled:hover, .btn[disabled]:hover {
+  border-color: var(--border);
+  transform: none;
+}
 .filter {
   background: var(--panel2); border: 1px solid var(--border); color: var(--text);
   padding: 9px 12px; border-radius: 10px; min-width: 280px; outline: none;
@@ -426,6 +436,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .toolbar { position:static; padding:10px; gap:9px; }
   .toolbar-main { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
   .toolbar-main .btn { min-height:44px; }
+  .toolbar-main .more-menu { grid-column: span 1; }
+  .more-dropdown { left: auto; right: 0; min-width: min(220px, 70vw); }
   .select-all { grid-column:1/-1; min-height:44px; }
   .toolbar-filters { gap:8px; }
   .status-filter { scrollbar-width:none; }
@@ -769,7 +781,8 @@ table.cand { min-width:650px; }
   flex: 1 1 auto;
   min-width: 0;
 }
-.export-toolbar #btn-copy {
+.export-toolbar #btn-copy,
+.export-toolbar #btn-download {
   flex: 0 0 auto;
   white-space: nowrap;
 }
@@ -834,3 +847,68 @@ table.cand { min-width:650px; }
   font-weight: 600;
 }
 .import-actions { flex-wrap: wrap; }
+
+
+/* More menu (toolbar declutter) */
+.more-menu {
+  position: relative;
+  display: inline-flex;
+}
+.more-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 168px;
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(31, 45, 61, .16);
+}
+.more-dropdown[hidden] { display: none !important; }
+.more-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.more-item:hover:not(:disabled) {
+  background: rgba(22, 119, 255, .08);
+  color: var(--accent);
+}
+.more-item.danger { color: var(--danger); }
+.more-item.danger:hover:not(:disabled) {
+  background: #fff1f0;
+  color: #cf1322;
+}
+.more-item:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.seg[data-status="problem"].active {
+  background: #fff1f0;
+  color: #cf1322;
+}
+
+#task-foot {
+  margin-top: 14px;
+  justify-content: space-between;
+}
+#task-foot .btn { flex: 1; }
+
+/* Card quick-export chips stay compact */
+.card-actions .js-copy-codex,
+.card-actions .js-copy-claude {
+  padding-inline: 10px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
