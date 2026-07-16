@@ -21,3 +21,36 @@
 - Deepened database/public_key, frontend state shape, API contracts, quality/error docs, cross-layer appendix.
 - Indexes updated; no template placeholders. Commit deferred per user request.
 
+
+
+## Session 1: Progressive core package refactor
+
+**Date**: 2026-07-16
+**Task**: Progressive core package refactor
+**Branch**: `main`
+
+### Summary
+
+Split core.py into core/ package with PROTOCOL_PROBES, EXPORT_FORMATS, IMPORTERS registries; kept import core API; updated tests, docs, and backend specs; 26 tests green.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dc49611` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
