@@ -34,9 +34,9 @@ class KeyService:
             if health:
                 result = core.health_check(entry["base_url"], entry["api_key"],
                     bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
-                    self._timeout(), entry.get("check_model", ""))
+                    self._timeout(), entry.get("check_model", ""), entry.get("check_path", ""))
             else:
-                result = core.classify(entry["base_url"], entry["api_key"], self._timeout(), entry.get("check_model", ""))
+                result = core.classify(entry["base_url"], entry["api_key"], self._timeout(), entry.get("check_model", ""), entry.get("check_path", ""))
             self._save_result(key_id, result)
             return result
         finally:
@@ -48,10 +48,10 @@ class KeyService:
             raise KeyError("key not found")
         if health:
             result = core.health_check(entry["base_url"], entry["api_key"],
-                bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
-                self._timeout(), entry.get("check_model", ""))
+                    bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
+                    self._timeout(), entry.get("check_model", ""), entry.get("check_path", ""))
         else:
-            result = core.classify(entry["base_url"], entry["api_key"], self._timeout(), entry.get("check_model", ""))
+            result = core.classify(entry["base_url"], entry["api_key"], self._timeout(), entry.get("check_model", ""), entry.get("check_path", ""))
         self._save_result(key_id, result)
         return result
 

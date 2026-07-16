@@ -123,6 +123,38 @@ class CoreTests(unittest.TestCase):
             core.export_config({"base_url": "https://example.com", "api_key": "k"}, "nope")
 
 
+
+
+    def test_normalize_check_path(self):
+        self.assertEqual(core.normalize_check_path(""), "")
+        self.assertEqual(core.normalize_check_path("  /v1/models  "), "/v1/models")
+        self.assertEqual(core.normalize_check_path("openai/v1/models"), "/openai/v1/models")
+        with self.assertRaises(ValueError):
+            core.normalize_check_path("https://evil.example/v1/models")
+        with self.assertRaises(ValueError):
+            core.normalize_check_path("//evil.example/v1")
+        with self.assertRaises(ValueError):
+            core.normalize_check_path("/v1/models?x=1")
+        with self.assertRaises(ValueError):
+            core.normalize_check_path("/v1/models#frag")
+
+    def test_probe_urls_custom_path(self):
+        urls = core.probe_urls("https://example.com/proxy", "models", "/custom/models")
+        self.assertEqual(urls, ["https://example.com/proxy/custom/models"])
+        default = core.probe_urls("https://example.com", "models", "")
+        self.assertEqual(default, core.candidate_urls("https://example.com", "models"))
+
+    def test_classify_uses_custom_check_path(self):
+        seen = []
+        def fake_request(method, url, headers, body, timeout):
+            seen.append(url)
+            return (200, '{"data":[]}', 1, None)
+        with patch("core.http._request", side_effect=fake_request):
+            result = core.classify("https://example.com", "sk-test", check_path="/gateway/models")
+        self.assertTrue(any(u.endswith("/gateway/models") for u in seen))
+        self.assertTrue(all("/gateway/models" in u for u in seen))
+        self.assertEqual(result["status"], "up")
+
 class DbTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -208,5 +240,21 @@ class DbTests(unittest.TestCase):
 
 
 
+
+    def test_check_path_roundtrip(self):
+        key_id = db.add_key({
+            "name": "p", "base_url": "https://example.com", "api_key": "sk-aaaaaaaaaaaa",
+            "check_path": "/v1/models",
+        })
+        entry = db.get_key(key_id)
+        self.assertEqual(entry.get("check_path"), "/v1/models")
+        db.update_key(key_id, {"check_path": "/custom/health"})
+        entry = db.get_key(key_id)
+        self.assertEqual(entry.get("check_path"), "/custom/health")
+        pub = db.public_key(entry)
+        self.assertEqual(pub.get("check_path"), "/custom/health")
+        self.assertNotIn("api_key", pub)
+
 if __name__ == "__main__":
     unittest.main()
+

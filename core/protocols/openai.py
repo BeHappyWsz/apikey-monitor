@@ -6,7 +6,7 @@ from version import USER_AGENT
 
 from core import http as http_mod
 from core.protocol_base import _protocol_result, _record_http
-from core.urls import candidate_urls
+from core.urls import candidate_urls, probe_urls
 
 
 def _parse_models(raw):
@@ -24,14 +24,14 @@ def _parse_models(raw):
     return found[:200]
 
 
-def probe(base, api_key, timeout):
+def probe(base, api_key, timeout, check_path=""):
     result = _protocol_result("openai")
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "User-Agent": USER_AGENT,
     }
-    for url in candidate_urls(base, "models"):
+    for url in probe_urls(base, "models", check_path):
         code, raw, ms, err = http_mod._request("GET", url, headers, None, timeout)
         _record_http(result, code, raw, ms, err)
         if code != 404 and code != 0:

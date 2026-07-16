@@ -1,0 +1,30 @@
+{
+  "id": "progressive-ext-next",
+  "name": "progressive-ext-next",
+  "title": "渐进扩展：协议/自定义路径/前端拆分",
+  "description": "Parent for third protocol E2E, custom check path, frontend module split",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "BeHappyWsz",
+  "assignee": "BeHappyWsz",
+  "createdAt": "2026-07-16",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-16-third-protocol-e2e",
+    "07-16-custom-check-path",
+    "07-16-frontend-module-split"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

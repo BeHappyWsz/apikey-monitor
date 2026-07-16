@@ -317,7 +317,7 @@ GET /api/tasks/{task_id}
 
 ### JSON 导出字段
 
-单条/批量 `fmt=json` 仅输出可移植配置字段：`name`、`base_url`、`api_key`、`check_model`（不含 `id`、状态、协议能力等内部字段）。
+单条/批量 `fmt=json` 仅输出可移植配置字段：`name`、`base_url`、`api_key`、`check_model`、`check_path`（不含 `id`、状态、协议能力等内部字段）。
 
 
 ### 备份全部（JSON）
@@ -352,4 +352,8 @@ Content-Type: application/json
 - 环境变量 / curl / `URL + Key` 纯文本
 - 导出/备份 JSON 数组、单条对象，或 `{ "items": [...] }` / `{ "keys": [...] }`
 
-返回 `candidates` 数组，元素含 `name`、`base_url`、`api_key`，以及可选的 `check_model`、`notes`。
+返回 `candidates` 数组，元素含 `name`、`base_url`、`api_key`，以及可选的 `check_model`、`check_path`、`notes`。
+
+## Custom check path
+
+Optional per-key field `check_path` (relative URL path under `base_url`). Empty uses built-in protocol endpoints. Absolute URLs are rejected. Applies to classify/health probes only (not model chat probes).

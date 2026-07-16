@@ -22,7 +22,7 @@ from core.protocols import (
     get_protocol,
     list_protocol_names,
 )
-from core.urls import candidate_urls, join_api_path, normalize_base_url
+from core.urls import candidate_urls, join_api_path, normalize_base_url, normalize_check_path, probe_urls
 
 # Historical private alias used by older tests/docs.
 _candidate_urls = candidate_urls
@@ -32,6 +32,8 @@ __all__ = [
     "normalize_base_url",
     "join_api_path",
     "candidate_urls",
+    "normalize_check_path",
+    "probe_urls",
     "parse_import_text",
     "parse_paste",
     "classify",

@@ -90,7 +90,7 @@ Reference: `api/handler.py`, `api/router.py`.
 - Modules: `snake_case.py`.
 - Functions: `snake_case`; private helpers prefix `_`.
 - HTTP paths: `/api/...` with resource nouns (`keys`, `tasks`, `settings`, `system`).
-- JSON fields for keys/settings: **snake_case** matching DB columns (`base_url`, `api_key`, `check_model`, `monitor_enabled`).
+- JSON fields for keys/settings: **snake_case** matching DB columns (`base_url`, `api_key`, `check_model`, `check_path`, `monitor_enabled`).
 - Service singletons: module-level `KEYS = KeyService()`, `TASKS = TaskService()`, `SETTINGS = SettingsService()`.
 
 ---
@@ -133,7 +133,7 @@ See [Local Development & Portability](../guides/local-dev-and-portability.md).
 
 Public import remains `import core`. Own pure domain logic here -- not in router or db:
 
-- `urls.py`: `normalize_base_url`, `join_api_path`, `candidate_urls`
+- `urls.py`: `normalize_base_url`, `join_api_path`, `candidate_urls / probe_urls / normalize_check_path`
 - `parse.py`: `parse_import_text` / `parse_paste` + `IMPORTERS` registry
 - `http.py`: probe HTTP client (`_request`)
 - `protocols/`: per-protocol probes + `PROTOCOL_PROBES` registry

@@ -240,6 +240,9 @@
         <input type="text" id="edit-check-model" placeholder="例如 gpt-4o / claude-sonnet-4-20250514" list="model-suggestions">
         <datalist id="model-suggestions"></datalist>
       </label>
+      <label><span>自定义检测路径（相对 Base URL，留空使用默认端点）</span>
+        <input type="text" id="edit-check-path" placeholder="例如 /v1/models 或 /openai/v1/models" autocomplete="off">
+      </label>
       <label><span>备注</span><textarea id="edit-notes" rows="3" placeholder="可选备注"></textarea></label>
       <label><span>启用监测</span>
         <select id="edit-monitor"><option value="1">开启</option><option value="0">关闭</option></select>

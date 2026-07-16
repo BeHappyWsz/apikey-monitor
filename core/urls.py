@@ -51,6 +51,34 @@ def join_api_path(base_url: str, path: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, joined, "", ""))
 
 
+def normalize_check_path(value: str) -> str:
+    """Validate optional relative check path (empty = default endpoints).
+
+    Relative-only: no scheme/host/query/fragment. Stored with a leading slash.
+    """
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    if _CONTROL_RE.search(value):
+        raise ValueError("check_path contains control characters")
+    if len(value) > 256:
+        raise ValueError("check_path is too long")
+    low = value.lower()
+    if "://" in value or low.startswith("http:") or low.startswith("https:"):
+        raise ValueError("check_path must be relative (no scheme)")
+    if value.startswith("//"):
+        raise ValueError("check_path must be relative (no host)")
+    if "?" in value or "#" in value:
+        raise ValueError("check_path must not include query or fragment")
+    if "\\" in value:
+        raise ValueError("check_path must use forward slashes")
+    if re.match(r"^[a-zA-Z]:", value):
+        raise ValueError("check_path must be a URL path")
+    path = value if value.startswith("/") else "/" + value
+    path = re.sub(r"/{2,}", "/", path)
+    return path
+
+
 def candidate_urls(base_url, endpoint):
     """Return unique candidate absolute URLs for an endpoint under base_url."""
     urls = [
@@ -58,3 +86,11 @@ def candidate_urls(base_url, endpoint):
         join_api_path(base_url, "/" + endpoint.lstrip("/")),
     ]
     return list(dict.fromkeys(urls))
+
+
+def probe_urls(base_url, endpoint, check_path=""):
+    """URLs to try for a protocol probe; custom relative path overrides defaults."""
+    custom = normalize_check_path(check_path)
+    if custom:
+        return [join_api_path(base_url, custom)]
+    return candidate_urls(base_url, endpoint)

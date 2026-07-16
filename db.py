@@ -78,7 +78,7 @@ def _migrate(conn):
     cols = {row[1] for row in conn.execute("PRAGMA table_info(keys)")}
     for col, decl in (("check_model", "TEXT DEFAULT ''"), ("model_status", "TEXT DEFAULT 'unknown'"),
                       ("model_latency_ms", "INTEGER"), ("model_last_check_at", "INTEGER"),
-                      ("model_last_error", "TEXT DEFAULT ''"), ("sort_order", "INTEGER DEFAULT 0")):
+                      ("model_last_error", "TEXT DEFAULT ''"), ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''")):
         if col not in cols:
             conn.execute(f"ALTER TABLE keys ADD COLUMN {col} {decl}")
     conn.execute("PRAGMA user_version=3")
@@ -96,7 +96,7 @@ def init_db():
             monitor_enabled INTEGER DEFAULT 1, interval_sec INTEGER, notes TEXT DEFAULT '',
             created_at INTEGER, check_model TEXT DEFAULT '', model_status TEXT DEFAULT 'unknown',
             model_latency_ms INTEGER, model_last_check_at INTEGER, model_last_error TEXT DEFAULT '',
-            sort_order INTEGER DEFAULT 0
+            sort_order INTEGER DEFAULT 0, check_path TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT);
         """)
@@ -180,11 +180,11 @@ def add_key(data):
     with connection(write=True) as conn:
         sort_order = _next_sort_order(conn)
         cur = conn.execute("""INSERT INTO keys
-            (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order)
-            VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order,check_path)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
             (data.get("name", ""), data["base_url"], data["api_key"], "unknown",
              int(bool(data.get("monitor_enabled", 1))), data.get("interval_sec"), data.get("notes", ""),
-             int(time.time()), data.get("check_model", ""), sort_order))
+             int(time.time()), data.get("check_model", ""), sort_order, data.get("check_path", "")))
         return cur.lastrowid
 
 
@@ -201,11 +201,11 @@ def add_keys_batch(items):
                 continue
             existing.add(marker)
             cur = conn.execute("""INSERT INTO keys
-                (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order)
-                VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order,check_path)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                 (item.get("name", ""), marker[0], marker[1], "unknown",
                  int(bool(item.get("monitor_enabled", 1))), item.get("interval_sec"), item.get("notes", ""),
-                 int(time.time()), item.get("check_model", ""), sort_order))
+                 int(time.time()), item.get("check_model", ""), sort_order, item.get("check_path", "")))
             ids.append(cur.lastrowid)
             sort_order += 10
     return ids, skipped_duplicate
@@ -239,7 +239,7 @@ def reorder_keys(ids):
 
 
 def update_key(key_id, data):
-    allowed = ("name", "base_url", "api_key", "monitor_enabled", "interval_sec", "notes", "check_model")
+    allowed = ("name", "base_url", "api_key", "monitor_enabled", "interval_sec", "notes", "check_model", "check_path")
     fields, values = [], []
     for col in allowed:
         if col in data:

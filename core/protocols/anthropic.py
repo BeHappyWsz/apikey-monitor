@@ -4,10 +4,10 @@ from version import USER_AGENT
 
 from core import http as http_mod
 from core.protocol_base import _protocol_result, _record_http
-from core.urls import candidate_urls
+from core.urls import candidate_urls, probe_urls
 
 
-def probe(base, api_key, timeout):
+def probe(base, api_key, timeout, check_path=""):
     result = _protocol_result("anthropic")
     headers = {
         "x-api-key": api_key,
@@ -20,7 +20,7 @@ def probe(base, api_key, timeout):
         "max_tokens": 1,
         "messages": [{"role": "user", "content": "ping"}],
     }
-    for url in candidate_urls(base, "messages"):
+    for url in probe_urls(base, "messages", check_path):
         code, raw, ms, err = http_mod._request("POST", url, headers, body, timeout)
         _record_http(result, code, raw, ms, err, validation_400=True)
         if code != 404 and code != 0:

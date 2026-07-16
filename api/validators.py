@@ -26,7 +26,7 @@ def key_payload(data, partial=False):
     if not isinstance(data, dict):
         raise ValueError("json object required")
     out = {}
-    for field in ("name", "base_url", "api_key", "notes", "check_model"):
+    for field in ("name", "base_url", "api_key", "notes", "check_model", "check_path"):
         if field in data:
             value = str(data.get(field) or "").strip()
             if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", value):
@@ -34,6 +34,8 @@ def key_payload(data, partial=False):
             out[field] = value
     if not partial or "base_url" in out:
         out["base_url"] = core.normalize_base_url(out.get("base_url"))
+    if "check_path" in out:
+        out["check_path"] = core.normalize_check_path(out.get("check_path"))
     if "api_key" in out:
         if not out.get("api_key"):
             if partial:

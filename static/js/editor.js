@@ -39,6 +39,7 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
       ? "请输入 API Key"
       : `留空表示不修改（当前 ${key.api_key_masked || "••••••••"}）`;
     $("#edit-check-model").value = key.check_model || "";
+    $("#edit-check-path").value = key.check_path || "";
     $("#edit-notes").value = key.notes || "";
     $("#edit-monitor").value = key.monitor_enabled ? "1" : "0";
     $("#edit-interval").value = key.interval_sec || "";
@@ -98,6 +99,7 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
       name: $("#edit-name").value.trim(),
       base_url: $("#edit-base-url").value.trim(),
       check_model: $("#edit-check-model").value.trim(),
+      check_path: $("#edit-check-path").value.trim(),
       notes: $("#edit-notes").value.trim(),
       monitor_enabled: $("#edit-monitor").value === "1" ? 1 : 0,
       interval_sec: $("#edit-interval").value.trim() || null,

@@ -29,7 +29,7 @@ def _empty_result(error, supports_openai=False, supports_anthropic=False):
     }
 
 
-def classify(base_url, api_key, timeout=15, check_model=""):
+def classify(base_url, api_key, timeout=15, check_model="", check_path=""):
     try:
         base = normalize_base_url(base_url)
     except ValueError as exc:
@@ -37,7 +37,7 @@ def classify(base_url, api_key, timeout=15, check_model=""):
     if not api_key:
         return _empty_result("missing api_key")
 
-    protocols = [entry["probe"](base, api_key, timeout) for entry in PROTOCOL_PROBES]
+    protocols = [entry["probe"](base, api_key, timeout, check_path) for entry in PROTOCOL_PROBES]
     status, latency, error = _aggregate(protocols)
     by_name = {p["protocol"]: p for p in protocols}
     openai = by_name.get("openai")
@@ -88,7 +88,7 @@ def model_check(base_url, api_key, model, supports_openai=False, supports_anthro
     return result
 
 
-def health_check(base_url, api_key, supports_openai=False, supports_anthropic=False, timeout=15, check_model=""):
+def health_check(base_url, api_key, supports_openai=False, supports_anthropic=False, timeout=15, check_model="", check_path=""):
     try:
         base = normalize_base_url(base_url)
     except ValueError as exc:
@@ -99,11 +99,11 @@ def health_check(base_url, api_key, supports_openai=False, supports_anthropic=Fa
     anth_probe = get_protocol("anthropic")["probe"]
 
     if supports_openai or not (supports_openai or supports_anthropic):
-        protocols.append(openai_probe(base, api_key, timeout))
+        protocols.append(openai_probe(base, api_key, timeout, check_path))
     if supports_anthropic or not (supports_openai or supports_anthropic) or not any(p["status"] == "up" for p in protocols):
-        protocols.append(anth_probe(base, api_key, timeout))
+        protocols.append(anth_probe(base, api_key, timeout, check_path))
     if not any(p["protocol"] == "openai" for p in protocols) and not any(p["status"] == "up" for p in protocols):
-        protocols.append(openai_probe(base, api_key, timeout))
+        protocols.append(openai_probe(base, api_key, timeout, check_path))
 
     status, latency, error = _aggregate(protocols)
     openai = next((p for p in protocols if p["protocol"] == "openai"), None)
