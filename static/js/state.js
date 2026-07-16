@@ -64,7 +64,7 @@ export function canReorder(status, query) {
 export function keysFingerprint(keys) {
   return (keys || []).map((key) => [
     key.id, key.status, key.latency_ms, key.last_check_at, key.last_error,
-    key.model_status, key.model_latency_ms, key.monitor_enabled, key.name,
+    key.model_status, key.model_latency_ms, key.model_last_error, key.monitor_enabled, key.name,
     key.base_url, key.check_model, key.notes, (key.models || []).join(","),
     key.supports_openai, key.supports_anthropic, key.sort_order,
     key.api_key_masked || "", key.has_api_key ? 1 : 0,

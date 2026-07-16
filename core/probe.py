@@ -10,7 +10,11 @@ def _aggregate(protocols):
     status = next((candidate for candidate in priority if any(p["status"] == candidate for p in protocols)), "unknown")
     relevant = [p for p in protocols if p["status"] == status]
     latency = next((p["latency_ms"] for p in relevant if p["latency_ms"] is not None), None)
-    errors = [f"{p['protocol']}: {p['error']}" for p in protocols if p.get("error")]
+    # Only surface errors from protocols that match the winning status.
+    # Otherwise a secondary protocol failure (e.g. Anthropic 404 on an
+    # OpenAI-only endpoint) keeps last_error/model_last_error populated
+    # while overall status is already "up".
+    errors = [f"{p['protocol']}: {p['error']}" for p in relevant if p.get("error")]
     return status, latency, "; ".join(errors)[:300]
 
 

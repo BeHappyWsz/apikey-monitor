@@ -35,8 +35,40 @@ class CoreTests(unittest.TestCase):
         with patch("core.http._request", side_effect=responses):
             result = core.classify("https://example.com", "sk-test")
         self.assertEqual(result["status"], "up")
+        self.assertFalse(result.get("error"))
         self.assertTrue(result["supports_openai"])
         self.assertTrue(result["supports_anthropic"])
+
+    def test_mixed_protocol_success_clears_secondary_error(self):
+        """OpenAI-only success must not keep Anthropic 404 as last_error."""
+        responses = [(200, '{"data":[]}', 1, None), (404, "", 1, "HTTP 404"), (404, "", 1, "HTTP 404")]
+        with patch("core.http._request", side_effect=responses):
+            result = core.classify("https://example.com", "sk-test")
+        self.assertEqual(result["status"], "up")
+        self.assertFalse(result.get("error"))
+        self.assertTrue(result["supports_openai"])
+        self.assertFalse(result["supports_anthropic"])
+
+    def test_aggregate_errors_only_from_winning_status(self):
+        protocols = [
+            {"protocol": "openai", "status": "up", "latency_ms": 10, "error": ""},
+            {"protocol": "anthropic", "status": "down", "latency_ms": 5, "error": "HTTP 404"},
+        ]
+        status, latency, error = core.probe._aggregate(protocols)
+        self.assertEqual(status, "up")
+        self.assertEqual(latency, 10)
+        self.assertEqual(error, "")
+
+    def test_aggregate_auth_error_keeps_auth_message(self):
+        protocols = [
+            {"protocol": "openai", "status": "auth_error", "latency_ms": 8, "error": "key rejected (401)"},
+            {"protocol": "anthropic", "status": "down", "latency_ms": None, "error": "unreachable"},
+        ]
+        status, latency, error = core.probe._aggregate(protocols)
+        self.assertEqual(status, "auth_error")
+        self.assertIn("key rejected", error)
+        self.assertNotIn("unreachable", error)
+
 
     def test_protocol_status_matrix(self):
         expected = {200: "up", 400: "degraded", 401: "auth_error", 403: "auth_error",
