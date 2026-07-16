@@ -18,6 +18,10 @@
 
 ```bash
 node --check static/app.js
+node --check static/js/cards.js
+node --check static/js/list_ui.js
+node --check static/js/export_ui.js
+node --check static/js/list_actions.js
 node --check static/js/editor.js
 node --check static/js/state.js
 node --check static/js/import.js
