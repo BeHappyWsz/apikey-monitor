@@ -41,6 +41,7 @@ python app.py --host 127.0.0.1 --port 7878 --no-browser
 - Default URL: `http://127.0.0.1:7878`
 - CLI `--host` / `--port` override DB settings **for the current process** (`app.py` builds `server.runtime_settings`).
 - Windows silent launch: `start.vbs` (uses `pythonw` when available, adds `--no-browser`).
+- macOS / Linux: `./start.sh` (prefers `python3`, adds `--no-browser`; optional `--bg` for background).
 
 ---
 

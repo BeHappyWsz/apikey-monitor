@@ -28,7 +28,7 @@
 | Python | **3.10+**（推荐 3.11 / 3.12 / 3.13） |
 | 依赖 | **无**（仅标准库：`http.server` / `sqlite3` / `urllib` 等） |
 | 浏览器 | 支持 ES Modules 的现代浏览器 |
-| 系统 | Windows / macOS / Linux（Windows 提供 `start.vbs` 静默启动） |
+| 系统 | Windows / macOS / Linux（Windows：`start.vbs`；macOS/Linux：`start.sh`） |
 
 ## 快速启动
 
@@ -53,6 +53,17 @@ python app.py --no-browser
 ### Windows 静默启动
 
 双击项目根目录的 `start.vbs`：无 CMD 窗口后台启动（优先 `pythonw.exe`，失败回退 `python.exe`），并加 `--no-browser`。需自行在浏览器打开上述地址。
+
+### macOS / Linux 启动脚本
+
+```bash
+chmod +x start.sh   # 首次
+./start.sh          # 前台，--no-browser
+./start.sh --bg     # 后台（nohup）
+./start.sh --host 127.0.0.1 --port 7878
+```
+
+脚本会切换到仓库根目录，优先使用 `python3`，否则 `python`。额外参数会传给 `app.py`。
 
 ### 端口与监听
 
@@ -124,12 +135,13 @@ https://api.example.com sk-xxxx
 | `docs/` | API / 设计说明 |
 | `tests/` | 单元与集成测试 |
 | `start.vbs` | Windows 静默启动 |
+| `start.sh` | macOS / Linux 启动（`--no-browser`，可选 `--bg`） |
 | `LICENSE` | MIT |
 
 ## 安全注意
 
 - API Key **明文**存在本地 `data.db`，请保护目录权限。
-- 默认本机访问；**不建议**监听 `0.0.0.0`，更不要暴露公网。
+- 默认本机访问；**不建议**监听 `0.0.0.0`，更不要暴露公网。页面系统设置在选择 `0.0.0.0` 时会显示风险提示并二次确认。
 - **列表脱敏**：`GET /api/keys`、`GET /api/keys/{id}` 仅返回 `api_key_masked` / `has_api_key`。
 - 完整密钥仅通过：编辑页复制/显示、导出、`GET /api/keys/{id}/secret`。
 - 编辑时 API Key **留空 = 不修改**已有密钥。

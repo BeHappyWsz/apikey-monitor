@@ -24,6 +24,7 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
     const settings = await loadSettings();
     $("#set-host").value = settings.server_host;
     $("#set-port").value = settings.server_port;
+    $("#lan-warning").hidden = settings.server_host !== "0.0.0.0";
     openModal("modal-system-settings");
   });
 
@@ -64,7 +65,7 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
   $("#btn-save-system-settings").addEventListener("click", async () => {
     const host = $("#set-host").value;
     const port = $("#set-port").value.trim();
-    if (host === "0.0.0.0" && !confirm("0.0.0.0 会允许局域网设备访问本页面。当前项目未启用访问密码，确认继续？")) return;
+    if (host === "0.0.0.0" && !confirm("确认将监听地址设为 0.0.0.0？局域网内其他设备可访问本管理页面，且当前未启用访问密码。请只在可信网络使用。")) return;
     await api("POST", "/api/settings", { ...state.settings, server_host: host, server_port: port });
     closeModal("modal-system-settings");
     const runtimeHost = state.runtime.host || state.settings.server_host;

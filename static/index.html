@@ -144,7 +144,7 @@
             <option value="0.0.0.0">0.0.0.0（局域网可访问）</option>
           </select>
         </label>
-        <div class="setting-note danger-note" id="lan-warning" hidden>局域网监听会暴露本地管理页面；当前未启用访问密码，请只在可信网络中使用。</div>
+        <div class="setting-note danger-note" id="lan-warning" hidden>局域网监听（0.0.0.0）会让同一网络内其他设备访问本管理页面。当前未启用访问密码，请只在可信网络中使用，切勿暴露公网。</div>
         <label><span>端口</span><input type="text" id="set-port" inputmode="numeric" placeholder="7878"></label>
         <div class="setting-note">保存后可立即安全重启。服务会先关闭旧端口，再启动新端口；若启动失败将自动恢复旧端口。命令行参数会覆盖这里的配置。</div>
         <button class="btn soft" id="btn-copy-start" type="button">⧉ 复制启动命令</button>
