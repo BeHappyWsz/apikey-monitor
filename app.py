@@ -18,6 +18,8 @@ class AppServer(ThreadingHTTPServer):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="API Key 配置与监测面板")
+    from version import __version__
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     parser.add_argument("--no-browser", action="store_true")

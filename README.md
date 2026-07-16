@@ -1,5 +1,8 @@
 # API Key 配置与监测面板
 
+[![Release](https://img.shields.io/github/v/release/BeHappyWsz/apikey-monitor?display_name=tag)](https://github.com/BeHappyWsz/apikey-monitor/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 本地运行的 **API Key 管理小工具**：收集 / 解析 / 检测 / 导出 OpenAI 兼容与 Anthropic 兼容接口配置。
 
 > **零第三方依赖**：仅需 Python 标准库 + 现代浏览器。默认只监听本机 `127.0.0.1`。

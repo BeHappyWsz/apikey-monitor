@@ -8,13 +8,14 @@ from urllib.parse import urlsplit
 
 from api.router import route, ApiError
 from api.validators import MAX_JSON_BODY, MAX_IMPORT_BODY
+from version import USER_AGENT
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "apiKeyConfig/2.0"
+    server_version = USER_AGENT
 
     def log_message(self, fmt, *args):
         pass

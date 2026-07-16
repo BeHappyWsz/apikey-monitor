@@ -29,9 +29,15 @@ def _id(match):
 
 def route(method, path, query, body, server):
     if method == "GET" and path == "/api/system/health":
-        return 200, {"status": "ok", "pid": __import__("os").getpid(),
-                     "host": server.runtime_settings["server_host"],
-                     "port": int(server.runtime_settings["server_port"])}
+        from version import APP_NAME, __version__
+        return 200, {
+            "status": "ok",
+            "pid": __import__("os").getpid(),
+            "host": server.runtime_settings["server_host"],
+            "port": int(server.runtime_settings["server_port"]),
+            "name": APP_NAME,
+            "version": __version__,
+        }
     if method == "GET" and path == "/api/keys":
         return 200, KEYS.list()
     if method == "GET" and path == "/api/settings":

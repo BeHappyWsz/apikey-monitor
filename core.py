@@ -6,6 +6,7 @@ import time
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit, urlunsplit
+from version import USER_AGENT
 
 MAX_RESPONSE_BYTES = 1024 * 1024
 _URL_RE = re.compile(r"https?://[^\s\"'`,<>\]\)]+", re.IGNORECASE)
@@ -282,7 +283,7 @@ def _record_http(result, code, raw, ms, err, success_codes=(200,), validation_40
 
 def _probe_openai(base, api_key, timeout):
     result = _protocol_result("openai")
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": "apiKeyConfig/2.0"}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": USER_AGENT}
     for url in _candidate_urls(base, "models"):
         code, raw, ms, err = _request("GET", url, headers, None, timeout)
         _record_http(result, code, raw, ms, err)
@@ -295,7 +296,7 @@ def _probe_openai(base, api_key, timeout):
 
 def _probe_anthropic(base, api_key, timeout):
     result = _protocol_result("anthropic")
-    headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json", "User-Agent": "apiKeyConfig/2.0"}
+    headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json", "User-Agent": USER_AGENT}
     body = {"model": "claude-3-5-haiku-20241022", "max_tokens": 1, "messages": [{"role": "user", "content": "ping"}]}
     for url in _candidate_urls(base, "messages"):
         code, raw, ms, err = _request("POST", url, headers, body, timeout)
@@ -351,7 +352,7 @@ def model_check(base_url, api_key, model, supports_openai=False, supports_anthro
         return result
     protocols = []
     if supports_openai or not (supports_openai or supports_anthropic):
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": "apiKeyConfig/2.0"}
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": USER_AGENT}
         body = {"model": model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1, "stream": False}
         probe = _protocol_result("openai")
         for url in _candidate_urls(base, "chat/completions"):
@@ -360,7 +361,7 @@ def model_check(base_url, api_key, model, supports_openai=False, supports_anthro
             if code not in (0, 404): break
         protocols.append(probe)
     if supports_anthropic:
-        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json", "User-Agent": "apiKeyConfig/2.0"}
+        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json", "User-Agent": USER_AGENT}
         body = {"model": model, "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}
         probe = _protocol_result("anthropic")
         for url in _candidate_urls(base, "messages"):
