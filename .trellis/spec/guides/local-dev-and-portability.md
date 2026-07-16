@@ -10,7 +10,7 @@
 |------------|-------------|
 | Zero third-party Python deps | No `pip install` for runtime. Do not add `requirements.txt` packages without an Issue. |
 | Zero frontend build step | Edit `static/**` and refresh the browser. No webpack/vite required to run. |
-| Local single-user tool | Default bind `127.0.0.1`. Secrets live in local SQLite plaintext today. |
+| Local single-user tool | Default bind `127.0.0.1`. **No web login/password by design.** Secrets in SQLite plaintext; protect OS file permissions. |
 | Portable data | Schema changes must go through `db._migrate` so an existing `data.db` still opens. |
 
 ---
@@ -102,7 +102,7 @@ When debugging restart on another machine, point these vars at a temp folder the
 | Windows | `start.vbs`; integration teardown uses `tasklist` / `taskkill` helpers for detached PIDs. |
 | macOS / Linux | Use `python app.py`; no first-party shell launcher yet (planned). Restart still works via subprocess helper. |
 | Ports | Integration tests bind free `127.0.0.1` ports; close leftover `python app.py` processes if health checks hang. |
-| Firewall | Binding `0.0.0.0` is allowed by validator but **not recommended**; no auth layer yet. |
+| Firewall | Binding `0.0.0.0` is allowed by validator but **not recommended**; **no web auth by design** — rely on loopback + OS permissions. |
 
 Supported `server_host` values in validator: only `127.0.0.1`, `localhost`, `0.0.0.0`.
 
