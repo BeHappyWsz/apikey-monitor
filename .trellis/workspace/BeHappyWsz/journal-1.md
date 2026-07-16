@@ -54,3 +54,37 @@ Split core.py into core/ package with PROTOCOL_PROBES, EXPORT_FORMATS, IMPORTERS
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: Wave2: frontend split + custom check_path
+
+**Date**: 2026-07-16
+**Task**: Wave2: frontend split + custom check_path
+**Branch**: `main`
+
+### Summary
+
+Skipped third protocol (parked as future). Split static/app.js into cards/list_ui/export_ui/list_actions; app.js is thin orchestrator. Added per-key check_path (relative-only) through DB/validators/probes/export/editor. 30 Python tests + frontend node checks green.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0802b48` | (see git log) |
+| `50c03d8` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
