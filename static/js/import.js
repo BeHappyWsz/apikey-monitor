@@ -30,16 +30,16 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
   $("#btn-empty-json")?.addEventListener("click", () => openImport(SAMPLE_JSON.trim() + "\n", { jsonHint: true }));
   $("#btn-fill-sample")?.addEventListener("click", () => {
     $("#paste-area").value = SAMPLE_TEXT;
-    toast("???????????????");
+    toast("已填入文本示例，可直接解析预览");
   });
   $("#btn-fill-json-sample")?.addEventListener("click", () => {
     $("#paste-area").value = SAMPLE_JSON.trim() + "\n";
-    toast("??? JSON ????????????");
+    toast("已填入 JSON 备份示例，可直接解析预览");
   });
 
   async function parsePaste() {
     const text = $("#paste-area").value;
-    if (!text.trim()) return toast("??????");
+    if (!text.trim()) return toast("请先粘贴内容");
     const result = await api("POST", "/api/import/parse", { text });
     state.candidates = (result.candidates || []).map((item) => ({
       name: item.name || "",
@@ -64,7 +64,7 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
         notes: (candidate.notes || "").trim(),
       };
     }).filter((item) => item.base_url && item.api_key);
-    if (!items.length) return toast("?????????");
+    if (!items.length) return toast("没有选中的有效候选");
     const result = await api("POST", "/api/keys/batch", { items });
     closeModal("modal-import");
     toast(formatImportSummary(result));
@@ -75,7 +75,7 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
   $("#btn-parse").addEventListener("click", () => parsePaste());
   $("#btn-save-cand").addEventListener("click", () => saveCandidates());
 
-  // Ctrl/Cmd+Enter??????????????
+  // Ctrl/Cmd+Enter: parse when empty candidates, save when has candidates
   $("#modal-import")?.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
@@ -115,8 +115,8 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
     candidate.show_key = !candidate.show_key;
     const input = row.querySelector(".cand-key");
     if (input) input.type = candidate.show_key ? "text" : "password";
-    toggle.textContent = candidate.show_key ? "?" : "?";
-    toggle.title = candidate.show_key ? "?? API Key" : "?? API Key";
+    toggle.textContent = candidate.show_key ? "◉" : "◎";
+    toggle.title = candidate.show_key ? "隐藏 API Key" : "显示 API Key";
   });
 
   $("#cand-all").addEventListener("change", (event) => {
@@ -130,8 +130,8 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
     $("#paste-area").value = prefill;
     $("#cand-body").innerHTML = "";
     $("#parse-info").textContent = jsonHint
-      ? "?????/??? JSON???????????????????"
-      : "???Ctrl+Enter ?????????? Ctrl+Enter ????";
+      ? "可粘贴导出/备份的 JSON（数组或单条对象），也支持环境变量文本"
+      : "提示：Ctrl+Enter 解析预览；解析后再次 Ctrl+Enter 批量入库";
     openModal("modal-import");
   }
 
@@ -140,16 +140,16 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
 
 function renderCandidates(state) {
   $("#parse-info").textContent = state.candidates.length
-    ? `??? ${state.candidates.length} ???????? / URL / Key / ?????? Ctrl+Enter ??`
-    : "??????";
+    ? `解析出 ${state.candidates.length} 条候选（可改名称 / URL / Key / 检测模型）· Ctrl+Enter 入库`
+    : "未识别到候选";
   $("#cand-body").innerHTML = state.candidates.map((candidate, index) => `<tr data-i="${index}">
     <td><input class="cand-sel" type="checkbox" ${state.candidateSelected.has(index) ? "checked" : ""}></td>
-    <td><input class="cand-name" value="${esc(candidate.name || "")}" placeholder="????"></td>
+    <td><input class="cand-name" value="${esc(candidate.name || "")}" placeholder="可选名称"></td>
     <td><input class="cand-url" value="${esc(candidate.base_url || "")}" placeholder="https://..."></td>
     <td><div class="input-line cand-key-line">
       <input class="cand-key" type="${candidate.show_key ? "text" : "password"}" value="${esc(candidate.api_key || "")}" autocomplete="off">
-      <button class="icon-btn js-cand-toggle" type="button" title="${candidate.show_key ? "?? API Key" : "?? API Key"}">${candidate.show_key ? "?" : "?"}</button>
+      <button class="icon-btn js-cand-toggle" type="button" title="${candidate.show_key ? "隐藏 API Key" : "显示 API Key"}">${candidate.show_key ? "◉" : "◎"}</button>
     </div></td>
-    <td><input class="cand-model" value="${esc(candidate.check_model || "")}" placeholder="????"></td>
+    <td><input class="cand-model" value="${esc(candidate.check_model || "")}" placeholder="可选模型"></td>
   </tr>`).join("");
 }

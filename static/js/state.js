@@ -1,7 +1,7 @@
 export function getVisibleKeys(keys, status = "all", query = "") {
   const q = String(query || "").trim().toLowerCase();
   const issueStatuses = new Set(["rate_limited", "degraded"]);
-  // "???"??????? / ?? / ?? / ?? / ???
+  // problem = not up
   const problemStatuses = new Set(["down", "auth_error", "rate_limited", "degraded", "unknown"]);
   return keys.filter((key) => {
     const state = key.status || "unknown";

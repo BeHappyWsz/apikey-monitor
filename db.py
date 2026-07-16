@@ -15,6 +15,7 @@ _FALLBACK_DEFAULTS = {
     "global_monitor_enabled": "1", "global_interval_sec": "300",
     "down_recheck_interval_sec": "120", "concurrency": "8",
     "request_timeout_sec": "15", "auto_classify_on_add": "1",
+    "ui_refresh_interval_sec": "5",
 }
 
 

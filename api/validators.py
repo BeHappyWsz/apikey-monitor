@@ -53,6 +53,17 @@ def key_payload(data, partial=False):
     return out
 
 
+
+def _normalize_ui_refresh(value, default=5):
+    """UI list poll interval seconds. 0 disables auto refresh; else 3-3600."""
+    number = normalize_int(value, default, 0, 3600)
+    if number is None:
+        number = default
+    if number != 0 and number < 3:
+        raise ValueError("ui_refresh_interval_sec must be 0 or at least 3")
+    return number
+
+
 def settings_payload(data, current=None):
     if not isinstance(data, dict):
         raise ValueError("json object required")
@@ -69,6 +80,7 @@ def settings_payload(data, current=None):
         "concurrency": str(normalize_int(data.get("concurrency", current.get("concurrency", 8)), 8, 1, 32)),
         "request_timeout_sec": str(normalize_int(data.get("request_timeout_sec", current.get("request_timeout_sec", 15)), 15, 3, 120)),
         "auto_classify_on_add": "1" if str(data.get("auto_classify_on_add", current.get("auto_classify_on_add", "1"))).lower() in ("1", "true") else "0",
+        "ui_refresh_interval_sec": str(_normalize_ui_refresh(data.get("ui_refresh_interval_sec", current.get("ui_refresh_interval_sec", 5)))),
     }
 
 

@@ -19,7 +19,7 @@ export function createTaskController({ api, load, openModal, closeModal, onTaskD
         const failed = Number(task.failed || 0);
         const skipped = Number(task.skipped || 0);
         const ok = Math.max(0, processed - failed - skipped);
-        toast(`???? ? ?? ${ok} ? ?? ${failed} ? ?? ${skipped} ? ? ${total}`, 4800);
+        toast(`检测结束 · 成功 ${ok} · 失败 ${failed} · 跳过 ${skipped} · 共 ${total}`, 4800);
         await load();
         return;
       }
@@ -28,26 +28,22 @@ export function createTaskController({ api, load, openModal, closeModal, onTaskD
 
   function openTask(task) {
     const progress = taskProgress(task);
-    $("#task-title").textContent = task.kind === "check" ? "??????" : "????";
+    $("#task-title").textContent = task.kind === "check" ? "批量检测进度" : "任务进度";
     const failed = Number(task.failed || 0);
     const skipped = Number(task.skipped || 0);
     const total = Number(task.total || 0);
     const processed = Number(task.completed || 0);
     if (progress.terminal) {
       const ok = Math.max(0, processed - failed - skipped);
-      $("#task-message").textContent = `??? ? ?? ${ok} ? ?? ${failed} ? ?? ${skipped} ? ? ${total}`;
+      $("#task-message").textContent = `已完成 · 成功 ${ok} · 失败 ${failed} · 跳过 ${skipped} · 共 ${total}`;
     } else {
-      $("#task-message").textContent = `${progress.label}??? ${failed}??? ${skipped}`;
+      $("#task-message").textContent = `${progress.label}，失败 ${failed}，跳过 ${skipped}`;
     }
     $("#task-progress-bar").style.width = `${progress.percent}%`;
     const foot = $("#task-foot");
     if (foot) foot.hidden = !progress.terminal;
     const problemsBtn = $("#btn-task-problems");
-    if (problemsBtn) {
-      problemsBtn.hidden = failed <= 0 && !progress.terminal;
-      // Always offer "?????" after terminal so user can review non-up keys
-      if (progress.terminal) problemsBtn.hidden = false;
-    }
+    if (problemsBtn && progress.terminal) problemsBtn.hidden = false;
     openModal("modal-task", !progress.terminal);
   }
 

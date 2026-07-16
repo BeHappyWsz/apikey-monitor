@@ -79,9 +79,12 @@ body {
 .stat-card.up b { color: var(--up); } .stat-card.down b { color: var(--down); } .stat-card.auth b { color: var(--auth); } .stat-card.avg b { color: var(--accent); }
 
 .toolbar {
+  position: relative;
+  z-index: 60;
   display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
   margin: 0 0 12px; padding: 10px; background: rgba(255,255,255,.72);
   border: 1px solid var(--border); border-radius: 14px; backdrop-filter: blur(8px);
+  overflow: visible;
 }
 .toolbar-main { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .toolbar-filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-left: auto; }
@@ -433,7 +436,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .stats { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:8px; }
   .stat-card { min-height:70px; padding:10px; }
   .stat-card.avg { grid-column:auto !important; }
-  .toolbar { position:static; padding:10px; gap:9px; }
+  .toolbar { position:relative; z-index:60; padding:10px; gap:9px; overflow:visible; }
   .toolbar-main { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
   .toolbar-main .btn { min-height:44px; }
   .toolbar-main .more-menu { grid-column: span 1; }
@@ -853,20 +856,21 @@ table.cand { min-width:650px; }
 .more-menu {
   position: relative;
   display: inline-flex;
+  z-index: 70;
 }
 .more-dropdown {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: 40;
-  min-width: 168px;
+  z-index: 80;
+  min-width: 180px;
   padding: 6px;
   display: grid;
   gap: 4px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 14px 34px rgba(31, 45, 61, .16);
+  box-shadow: 0 14px 34px rgba(31, 45, 61, .18);
 }
 .more-dropdown[hidden] { display: none !important; }
 .more-item {
@@ -879,6 +883,7 @@ table.cand { min-width:650px; }
   color: var(--text);
   font-size: 13px;
   cursor: pointer;
+  white-space: nowrap;
 }
 .more-item:hover:not(:disabled) {
   background: rgba(22, 119, 255, .08);
@@ -912,3 +917,6 @@ table.cand { min-width:650px; }
   font-weight: 600;
   letter-spacing: .01em;
 }
+
+.list-wrap { position: relative; z-index: 1; }
+.hero-panel { position: relative; z-index: 1; }

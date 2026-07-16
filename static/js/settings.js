@@ -1,7 +1,7 @@
 import { restartCandidates } from "./state.js";
 import { $, copyText, esc, toast } from "./utils.js";
 
-export function initSettings({ api, state, openModal, closeModal, waitForHealth }) {
+export function initSettings({ api, state, openModal, closeModal, waitForHealth, onSettingsApplied }) {
   async function loadSettings() {
     const settings = await api("GET", "/api/settings");
     let runtime;
@@ -34,6 +34,7 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth 
     $("#set-down").value = settings.down_recheck_interval_sec;
     $("#set-conc").value = settings.concurrency;
     $("#set-timeout").value = settings.request_timeout_sec;
+    $("#set-ui-refresh").value = settings.ui_refresh_interval_sec ?? 5;
     openModal("modal-monitor-settings");
   });
 
@@ -44,14 +45,18 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth 
   $("#btn-copy-start").addEventListener("click", () => copyText(`python app.py --host ${$("#set-host").value} --port ${$("#set-port").value}`, "启动命令"));
 
   $("#btn-save-monitor-settings").addEventListener("click", async () => {
-    await api("POST", "/api/settings", {
+    const payload = {
       ...state.settings,
       global_monitor_enabled: $("#set-enabled").value,
       global_interval_sec: $("#set-interval").value,
       down_recheck_interval_sec: $("#set-down").value,
       concurrency: $("#set-conc").value,
       request_timeout_sec: $("#set-timeout").value,
-    });
+      ui_refresh_interval_sec: $("#set-ui-refresh").value,
+    };
+    const saved = await api("POST", "/api/settings", payload);
+    state.settings = saved || payload;
+    if (typeof onSettingsApplied === "function") onSettingsApplied(state.settings);
     closeModal("modal-monitor-settings");
     toast("监测设置已保存");
   });

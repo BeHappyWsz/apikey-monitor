@@ -1,5 +1,5 @@
 {
-  "_comment": "apiKeyConfig 默认配置文件。首次启动时自动写入数据库，后续通过页面「系统设置/监测设置」修改的值会覆盖这里的默认值。删除某行的数据库记录并重启可恢复为这里的默认值。",
+  "_comment": "apiKeyConfig default settings. First boot seeds DB; UI system/monitor settings override at runtime.",
   "server_host": "127.0.0.1",
   "server_port": "7878",
   "global_monitor_enabled": "1",
@@ -7,5 +7,6 @@
   "down_recheck_interval_sec": "120",
   "concurrency": "8",
   "request_timeout_sec": "15",
-  "auto_classify_on_add": "1"
+  "auto_classify_on_add": "1",
+  "ui_refresh_interval_sec": "5"
 }

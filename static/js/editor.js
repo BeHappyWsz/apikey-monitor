@@ -15,10 +15,10 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
   });
   $("#btn-copy-models").addEventListener("click", () => {
     const key = state.keys.find((value) => value.id === state.modelId);
-    copyText((key?.models || []).join("\n"), "????");
+    copyText((key?.models || []).join("\n"), "模型列表");
   });
 
-  // Ctrl/Cmd+Enter ? ?????
+  // Ctrl/Cmd+Enter -> save and check
   $("#modal-edit")?.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
@@ -36,8 +36,8 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
     $("#edit-api-key").value = "";
     $("#edit-api-key").type = "password";
     $("#edit-api-key").placeholder = key.has_api_key === false
-      ? "??? API Key"
-      : `?????????? ${key.api_key_masked || "????????"}?`;
+      ? "请输入 API Key"
+      : `留空表示不修改（当前 ${key.api_key_masked || "••••••••"}）`;
     $("#edit-check-model").value = key.check_model || "";
     $("#edit-notes").value = key.notes || "";
     $("#edit-monitor").value = key.monitor_enabled ? "1" : "0";
@@ -56,23 +56,20 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
   async function toggleRevealKey() {
     const input = $("#edit-api-key");
     if (input.type === "password") {
-      // Prefer newly typed value; otherwise load full secret for view.
       if (!input.value.trim()) {
         try {
           const full = await fetchSecret();
           if (full) input.value = full;
         } catch (err) {
-          toast(err.message || "???? Key ??");
+          toast(err.message || "获取完整 Key 失败");
           return;
         }
       }
       input.type = "text";
     } else {
-      // Leaving reveal mode: if value equals secret and user didn't intend to change,
-      // clear so save keeps "blank = no change".
       if (revealedSecret && input.value === revealedSecret) {
         input.value = "";
-        input.placeholder = `????????????? Key?`;
+        input.placeholder = `留空表示不修改（当前已保存 Key）`;
       }
       input.type = "password";
     }
@@ -87,12 +84,12 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
     try {
       const full = await fetchSecret();
       if (!full) {
-        toast("???????? API Key");
+        toast("当前没有可复制的 API Key");
         return;
       }
       await copyText(full, "API Key");
     } catch (err) {
-      toast(err.message || "???? Key ??");
+      toast(err.message || "获取完整 Key 失败");
     }
   }
 
@@ -107,11 +104,10 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
       check_after_save: checkAfter,
     };
     const apiKey = $("#edit-api-key").value.trim();
-    // Only send api_key when user entered a new value (not just revealed the existing one).
     if (apiKey && apiKey !== revealedSecret) payload.api_key = apiKey;
     await api("PUT", `/api/keys/${state.editId}`, payload);
     closeModal("modal-edit");
-    toast(checkAfter ? "????????" : "????????????????");
+    toast(checkAfter ? "已保存并完成检测" : "已保存，连接信息变化时状态已重置");
     await load();
   }
 
