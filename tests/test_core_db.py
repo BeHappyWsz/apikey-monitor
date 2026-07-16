@@ -85,6 +85,34 @@ class CoreTests(unittest.TestCase):
             core.export_batch([entry], "env")
 
 
+    def test_parse_import_json_array_and_object(self):
+        arr = core.parse_import_text("""[
+          {"name": "a", "base_url": "https://a.example/v1", "api_key": "sk-aaaaaaaaaaaa", "check_model": "gpt"},
+          {"name": "b", "base_url": "https://b.example", "api_key": "sk-bbbbbbbbbbbb"}
+        ]""")
+        self.assertEqual(len(arr), 2)
+        self.assertEqual(arr[0]["check_model"], "gpt")
+        self.assertEqual(arr[0]["name"], "a")
+        one = core.parse_import_text('{"base_url":"https://c.example","api_key":"sk-cccccccccccc","name":"c"}')
+        self.assertEqual(len(one), 1)
+        self.assertEqual(one[0]["name"], "c")
+        wrapped = core.parse_import_text('{"items":[{"base_url":"https://d.example","api_key":"sk-dddddddddddd"}]}')
+        self.assertEqual(len(wrapped), 1)
+        # still supports env paste
+        paste = core.parse_import_text("OPENAI_BASE_URL=https://e.example\nOPENAI_API_KEY=sk-eeeeeeeeeeee")
+        self.assertEqual(len(paste), 1)
+        self.assertEqual(paste[0]["base_url"], "https://e.example")
+
+    def test_export_roundtrip_fields(self):
+        entry = {"name": "n", "base_url": "https://example.com/v1", "api_key": "sk-demo-key-xx", "check_model": "m"}
+        text = core.export_config(entry, "json")
+        back = core.parse_import_text(text)
+        self.assertEqual(len(back), 1)
+        self.assertEqual(back[0]["base_url"], "https://example.com/v1")
+        self.assertEqual(back[0]["api_key"], "sk-demo-key-xx")
+        self.assertEqual(back[0]["check_model"], "m")
+
+
 class DbTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

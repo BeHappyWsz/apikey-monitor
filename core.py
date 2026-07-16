@@ -66,6 +66,70 @@ def join_api_path(base_url: str, path: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, joined, "", ""))
 
 
+
+def _normalize_import_items(data):
+    """Normalize JSON backup / export payload into candidate entries."""
+    if isinstance(data, dict):
+        if isinstance(data.get("items"), list):
+            data = data["items"]
+        elif isinstance(data.get("keys"), list):
+            data = data["keys"]
+        else:
+            data = [data]
+    if not isinstance(data, list):
+        return []
+    out, seen = [], set()
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        base_raw = str(item.get("base_url") or item.get("url") or item.get("baseUrl") or "").strip()
+        key = str(
+            item.get("api_key")
+            or item.get("key")
+            or item.get("token")
+            or item.get("auth_token")
+            or item.get("apiKey")
+            or ""
+        ).strip()
+        if not base_raw or not key:
+            continue
+        if "\r" in key or "\n" in key:
+            continue
+        try:
+            base = normalize_base_url(base_raw)
+        except ValueError:
+            continue
+        marker = (base, key)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append({
+            "name": str(item.get("name") or "").strip(),
+            "base_url": base,
+            "api_key": key,
+            "check_model": str(item.get("check_model") or item.get("model") or "").strip(),
+            "notes": str(item.get("notes") or "").strip(),
+        })
+    return out
+
+
+def parse_import_text(text: str):
+    """Parse paste text or JSON export/backup into candidates."""
+    if not text or not str(text).strip():
+        return []
+    raw = str(text).strip()
+    if raw[0] in "[{":
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = None
+        if data is not None:
+            items = _normalize_import_items(data)
+            if items:
+                return items
+    return parse_paste(raw)
+
+
 def _candidate_urls(base_url, endpoint):
     urls = [join_api_path(base_url, "/v1/" + endpoint.lstrip("/")),
             join_api_path(base_url, "/" + endpoint.lstrip("/"))]

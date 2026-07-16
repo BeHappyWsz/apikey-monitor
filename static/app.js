@@ -102,13 +102,19 @@ function render({ preserveUi = false } = {}) {
   if (!state.keys.length) {
     empty.hidden = false;
     empty.querySelector(".empty-title").textContent = "还没有 Key";
-    empty.querySelector(".empty-desc").textContent = "支持粘贴环境变量 / curl /「URL + Key」，也可手动添加单条配置。";
+    if (empty.querySelector(".empty-desc")) empty.querySelector(".empty-desc").textContent = "三步开始：粘贴配置 → 预览确认 → 自动检测。支持环境变量 / curl / JSON 备份，也可手动添加。";
+      const steps = empty.querySelector(".empty-steps"); if (steps) steps.hidden = false;
+      const hint = empty.querySelector(".empty-hint"); if (hint) hint.hidden = false;
+      const badge = empty.querySelector(".empty-badge"); if (badge) badge.hidden = false;
     empty.querySelector(".empty-actions").hidden = false;
   } else if (!rows.length) {
     empty.hidden = false;
     empty.querySelector(".empty-title").textContent = "当前筛选没有结果";
-    empty.querySelector(".empty-desc").textContent = "试试切换状态筛选，或清空搜索关键字。";
+    if (empty.querySelector(".empty-desc")) empty.querySelector(".empty-desc").textContent = "试试切换状态筛选，或清空搜索关键字。";
     empty.querySelector(".empty-actions").hidden = true;
+    const steps = empty.querySelector(".empty-steps"); if (steps) steps.hidden = true;
+    const hint = empty.querySelector(".empty-hint"); if (hint) hint.hidden = true;
+    const badge = empty.querySelector(".empty-badge"); if (badge) badge.hidden = true;
   } else {
     empty.hidden = true;
   }
@@ -134,7 +140,7 @@ function card(key) {
       </div>
     </header>
     <div class="card-body-grid">
-      <div class="metric primary-metric"><span>API Key</span><b>${esc(key.api_key_masked || maskKey(key.api_key))}</b></div>
+      <div class="metric primary-metric"><span>API Key</span><b class="key-mask-line"><span>${esc(key.api_key_masked || maskKey(key.api_key))}</span><button class="link-btn js-copy-key" type="button" title="复制完整 API Key">复制</button></b></div>
       <div class="metric"><span>协议能力</span><b>${protocols.length ? protocols.map((item) => `<em>${item}</em>`).join(" ") : "待检测"}</b></div>
       <div class="metric wide-metric"><span>模型检测</span><b class="model-state ${modelState.replace(/_/g, "-")}">${esc(key.check_model || "未设置")} · ${statusLabel[modelState] || "未知"}</b></div>
     </div>
@@ -205,6 +211,17 @@ $("#status-filter").addEventListener("click", (event) => {
   if (button) { state.status = button.dataset.status; render(); }
 });
 $("#btn-refresh").addEventListener("click", () => load());
+$("#btn-backup-all")?.addEventListener("click", async () => {
+  if (!state.keys.length) return toast("还没有可备份的 Key");
+  const result = await api("GET", "/api/keys/export_all");
+  state.exportId = null;
+  state.exportMode = "backup";
+  $("#exp-fmt").value = "json";
+  $("#exp-fmt").disabled = true;
+  $("#exp-meta").textContent = `全部备份 · ${result.count || state.keys.length} 条 JSON`;
+  $("#exp-text").value = result.text || "";
+  openModal("modal-export");
+});
 
 $("#key-list").addEventListener("click", async (event) => {
   const cardEl = event.target.closest(".key-card");
@@ -212,6 +229,13 @@ $("#key-list").addEventListener("click", async (event) => {
   const key = state.keys.find((value) => value.id === id);
   if (!key) return;
   if (event.target.closest(".js-copy-url")) return copyText(key.base_url, "Base URL");
+  if (event.target.closest(".js-copy-key")) {
+    try {
+      const secret = await api("GET", `/api/keys/${id}/secret`);
+      if (!secret.api_key) return toast("当前没有可复制的 API Key");
+      return copyText(secret.api_key, "API Key");
+    } catch { return; }
+  }
   if (event.target.closest(".js-edit")) return editor.openEdit(key);
   if (event.target.closest(".js-models")) return openModels(key);
   if (event.target.closest(".js-export")) {

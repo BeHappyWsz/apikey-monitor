@@ -777,3 +777,60 @@ table.cand { min-width:650px; }
   background: #fff7ed;
   color: #c2410c;
 }
+
+
+/* Empty state / first-run guidance */
+.empty-badge {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--accent);
+  background: rgba(22, 119, 255, .10);
+  border: 1px solid rgba(22, 119, 255, .18);
+}
+.empty-steps {
+  max-width: 460px;
+  margin: 14px auto 18px;
+  padding: 12px 14px 12px 32px;
+  text-align: left;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  line-height: 1.55;
+  font-size: 13px;
+}
+.empty-steps li { margin: 4px 0; }
+.empty-steps code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0,0,0,.04);
+}
+.empty-hint {
+  margin: 14px auto 0;
+  max-width: 420px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.key-mask-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.key-mask-line .link-btn {
+  font-size: 12px;
+  font-weight: 600;
+}
+.import-actions { flex-wrap: wrap; }

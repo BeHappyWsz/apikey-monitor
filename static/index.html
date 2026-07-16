@@ -44,6 +44,7 @@
       <button class="btn" id="btn-add">＋ 手动添加</button>
       <button class="btn" id="btn-check">⟳ 批量检测</button>
       <button class="btn" id="btn-export-selected">⇪ 导出选中</button>
+      <button class="btn" id="btn-backup-all" type="button" title="导出全部为 JSON 备份">💾 备份全部</button>
       <button class="btn danger" id="btn-delete">🗑 批量删除</button>
       <button class="btn" id="btn-refresh">↻ 刷新</button>
       <label class="select-all"><input type="checkbox" id="sel-all"> 全选</label>
@@ -70,13 +71,21 @@
     </div>
     <div class="selection-bar" id="selection-bar"><span id="selection-summary">已选择 0 条</span><div><button class="btn" id="btn-check-mobile">批量检测</button><button class="btn" id="btn-export-mobile">导出选中</button><button class="btn danger" id="btn-delete-mobile">批量删除</button></div></div>
     <div class="key-list" id="key-list" aria-live="polite"></div>
-    <div class="empty" id="empty">
+    <div class="empty" id="empty" hidden>
+      <div class="empty-badge">FIRST RUN</div>
       <div class="empty-title">还没有 Key</div>
-      <p class="empty-desc">支持粘贴环境变量 / curl /「URL + Key」，也可手动添加单条配置。</p>
+      <p class="empty-desc">三步开始：粘贴配置 → 预览确认 → 自动检测协议与连通性。也支持导入本工具导出的 JSON 备份。</p>
+      <ol class="empty-steps">
+        <li>粘贴环境变量、<code>curl</code>、一行 <code>URL + Key</code>，或 JSON 备份</li>
+        <li>解析预览，按需改名称 / URL / Key / 检测模型</li>
+        <li>入库后自动判别 OpenAI / Anthropic，可随时导出</li>
+      </ol>
       <div class="empty-actions">
         <button class="btn primary" id="btn-empty-import" type="button">＋ 粘贴导入</button>
         <button class="btn" id="btn-empty-add" type="button">＋ 手动添加</button>
+        <button class="btn soft" id="btn-empty-json" type="button">从 JSON 恢复</button>
       </div>
+      <p class="empty-hint">提示：列表中的 API Key 默认脱敏；复制 / 导出才会按需取完整密钥。</p>
     </div>
   </section>
 </main>
@@ -88,18 +97,19 @@
       <h2>粘贴导入</h2>
       <button class="x" data-close>✕</button>
     </div>
-    <p class="hint">把任意内容粘进来（环境变量、curl 命令、或一行 url + key），点「解析预览」自动拆分。一行一对最佳。预览中可直接修改名称 / URL / Key。</p>
+    <p class="hint">支持：环境变量、<code>curl</code>、一行 <code>URL + Key</code>，以及本工具导出的 <strong>JSON 备份</strong>（数组或单条对象）。点「解析预览」后可在表格中改名称 / URL / Key / 检测模型。</p>
     <textarea id="paste-area" rows="6" placeholder="例如：&#10;ANTHROPIC_BASE_URL=https://api.example.com&#10;ANTHROPIC_AUTH_TOKEN=sk-ant-xxxx&#10;&#10;或：&#10;https://api.example.com  sk-xxxx"></textarea>
-    <div class="row">
+    <div class="row import-actions">
       <button class="btn" id="btn-parse">🔍 解析预览</button>
-      <button class="btn ghost" id="btn-fill-sample" type="button">填入示例</button>
+      <button class="btn ghost" id="btn-fill-sample" type="button">文本示例</button>
+      <button class="btn ghost" id="btn-fill-json-sample" type="button">JSON 示例</button>
       <span class="hint" id="parse-info"></span>
     </div>
     <div class="cand-wrap">
       <table class="cand">
         <thead>
           <tr><th class="col-sel"><input type="checkbox" id="cand-all" checked></th>
-          <th>名称(可改)</th><th>Base URL</th><th>API Key</th></tr>
+          <th>名称(可改)</th><th>Base URL</th><th>API Key</th><th>检测模型</th></tr>
         </thead>
         <tbody id="cand-body"></tbody>
       </table>

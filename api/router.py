@@ -64,7 +64,7 @@ def route(method, path, query, body, server):
         except KeyError: raise ApiError(404, "key_not_found", "Key 不存在")
 
     if method == "POST" and path == "/api/import/parse":
-        return 200, {"candidates": core.parse_paste((body or {}).get("text", ""))}
+        return 200, {"candidates": core.parse_import_text((body or {}).get("text", ""))}
     if method == "POST" and path == "/api/keys":
         try: payload = validators.key_payload(body)
         except ValueError as exc: raise ApiError(400, "invalid_key", str(exc))
@@ -90,6 +90,11 @@ def route(method, path, query, body, server):
         if path.endswith("batch_delete"):
             return 200, {"deleted": KEYS.delete(ids)}
         return 202, KEYS.batch_check(ids)
+    if method == "GET" and path == "/api/keys/export_all":
+        entries = KEYS.list(public=False)
+        try: text = core.export_batch(entries, "json")
+        except ValueError as exc: raise ApiError(400, "invalid_export", str(exc))
+        return 200, {"text": text, "count": len(entries), "fmt": "json"}
     if method == "POST" and path == "/api/keys/batch_export":
         try: ids = validators.ids_payload(body)
         except ValueError as exc: raise ApiError(400, "invalid_ids", str(exc))

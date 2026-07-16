@@ -1,0 +1,35 @@
+# Changelog
+
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 的风格，版本号采用语义化思路（小工具可按功能里程碑递增）。
+
+## [Unreleased]
+
+### Added
+
+- 列表卡片一键复制完整 API Key（走 `/api/keys/{id}/secret`，列表本身仍脱敏）
+- 导入支持 JSON 备份/导出格式（与 `name` / `base_url` / `api_key` / `check_model` 对称）
+- 「备份全部」：一键导出全部 Key 为 JSON（`GET /api/keys/export_all`）
+- 空状态首次引导：步骤说明 +「从 JSON 恢复」
+- 导入预览增加检测模型列；提供文本 / JSON 示例
+- GitHub Actions CI（Python unittest + Node 语法检查）
+- `CHANGELOG.md` / `CONTRIBUTING.md`
+
+### Security
+
+- 列表与详情接口默认返回 `api_key_masked`，不暴露明文 Key
+
+### Changed
+
+- JSON 导出字段精简为可移植配置：`name`、`base_url`、`api_key`、`check_model`
+- 导出弹窗布局优化，复制按钮不再被挤扁
+
+## [0.1.0] - 2026-07-16
+
+### Added
+
+- 本地 API Key 管理：粘贴导入、手动添加、协议判别、定时监测
+- 批量检测 / 删除 / 导出，任务进度
+- 导出 Claude Code、Codex CLI、`.env`、PowerShell、JSON
+- 安全切换端口与回滚
+- 基础单元测试与集成测试
+- MIT 许可证与开源 README

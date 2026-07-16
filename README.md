@@ -13,7 +13,8 @@
 - **Web 管理**：筛选、批量检测/删除、拖拽排序、编辑、导出
 - **批量任务**：导入/批量检测显示进度与失败数
 - **配置导出**：Claude Code、Codex CLI、`.env`、PowerShell、JSON；支持**批量 JSON**
-- **列表脱敏**：列表/详情不返回明文 Key；复制/显示/导出按需取完整密钥
+- **列表脱敏**：列表/详情不返回明文 Key；卡片可一键复制完整 Key（按需取 secret）
+- **JSON 备份/恢复**：备份全部为 JSON；粘贴导入可直接识别同格式 JSON
 - **安全换端口**：先释放旧端口再启新端口，失败自动回滚
 
 ## 环境要求
@@ -128,6 +129,12 @@ https://api.example.com sk-xxxx
 - 完整密钥仅通过：编辑页复制/显示、导出、`GET /api/keys/{id}/secret`。
 - 编辑时 API Key **留空 = 不修改**已有密钥。
 
+## 备份与恢复
+
+1. 工具栏 **「备份全部」** → 复制/保存 JSON（含全部 Key 明文，请妥善保管）。
+2. 新环境打开 **「粘贴导入」** 或空状态 **「从 JSON 恢复」**，粘贴备份 → 解析预览 → 入库。
+3. 也可导出选中项为 JSON，再同样方式导入。
+
 ## 开发与测试
 
 ```bash
@@ -147,7 +154,7 @@ node --test tests/state.test.mjs
 
 ## 许可证
 
-本项目以 [MIT License](LICENSE) 开源。
+本项目以 [MIT License](LICENSE) 开源。欢迎阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 参与贡献；变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
