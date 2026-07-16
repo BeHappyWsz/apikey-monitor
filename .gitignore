@@ -43,3 +43,7 @@ Review/
 
 # Optional local screenshots draft
 docs/screenshots/_draft/
+
+# Local agent design dumps (not for public tree)
+docs/superpowers/
+
