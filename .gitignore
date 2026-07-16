@@ -1,0 +1,45 @@
+# Local database / secrets (never commit)
+data.db
+data.db-wal
+data.db-shm
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+ENV/
+
+# Local runtime / temp
+.runtime/
+.tmp/
+tmp/
+temp/
+
+# Agent / IDE / OS
+.agents/
+.claude/
+.codex/
+.cursor/
+.workbuddy/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local review notes (keep on disk, not for public repo)
+Review/
+
+# Env / logs
+.env
+.env.*
+*.log
+
+# Optional local screenshots draft
+docs/screenshots/_draft/

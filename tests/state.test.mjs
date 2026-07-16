@@ -1,0 +1,20 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { getVisibleKeys, selectCurrentResults, selectionSummary, taskProgress, restartCandidates, isLatestResponse, moveKey, canReorder, keysFingerprint } from "../static/js/state.js";
+const keys=[{id:1,status:"up",name:"Alpha",models:["gpt-4"]},{id:2,status:"down",name:"Beta",models:[]}];
+test("visible filtering",()=>assert.deepEqual(getVisibleKeys(keys,"up","").map(k=>k.id),[1]));
+test("select current only",()=>assert.deepEqual([...selectCurrentResults(new Set(),[keys[0]],true)],[1]));
+test("selection summary includes hidden",()=>assert.deepEqual(selectionSummary(new Set([1,2]),[keys[0]]),{total:2,visible:1,hidden:1,resultTotal:1}));
+test("task progress",()=>assert.deepEqual(taskProgress({total:4,completed:2,status:"running"}),{percent:50,label:"2/4",terminal:false}));
+test("restart rollback URL first",()=>assert.deepEqual(restartCandidates({status:"rolled_back",old_url:"old",target_url:"new"}),["old","new"]));
+test("stale response",()=>assert.equal(isLatestResponse(1,2),false));
+test("move key before target",()=>assert.deepEqual(moveKey(keys,2,1).map(k=>k.id),[2,1]));
+test("reorder only all unfiltered",()=>assert.equal(canReorder("all",""),true));
+test("reorder disabled while filtered",()=>assert.equal(canReorder("up",""),false));
+const issueKeys=[{id:1,status:"rate_limited",name:"R"},{id:2,status:"degraded",name:"D"},{id:3,status:"up",name:"U"}];
+test("issue filtering",()=>assert.deepEqual(getVisibleKeys(issueKeys,"issue","").map(k=>k.id),[1,2]));
+test("fingerprint changes with status",()=>{
+  const a=keysFingerprint([{id:1,status:"up",latency_ms:1}]);
+  const b=keysFingerprint([{id:1,status:"down",latency_ms:1}]);
+  assert.notEqual(a,b);
+});

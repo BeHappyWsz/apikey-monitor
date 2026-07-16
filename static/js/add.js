@@ -1,0 +1,43 @@
+import { $, toast, formatCheckSummary } from "./utils.js";
+
+export function initAdd({ api, load, openModal, closeModal }) {
+  const open = () => {
+    $("#add-name").value = "";
+    $("#add-base-url").value = "";
+    $("#add-api-key").value = "";
+    $("#add-api-key").type = "password";
+    $("#add-notes").value = "";
+    $("#add-check-after").value = "1";
+    openModal("modal-add");
+    setTimeout(() => $("#add-base-url").focus(), 0);
+  };
+
+  $("#btn-add")?.addEventListener("click", open);
+  $("#btn-empty-add")?.addEventListener("click", open);
+  $("#btn-toggle-add-key")?.addEventListener("click", () => {
+    $("#add-api-key").type = $("#add-api-key").type === "password" ? "text" : "password";
+  });
+  $("#btn-save-add")?.addEventListener("click", () => save(false));
+  $("#btn-save-check-add")?.addEventListener("click", () => save(true));
+
+  async function save(forceCheck) {
+    const payload = {
+      name: $("#add-name").value.trim(),
+      base_url: $("#add-base-url").value.trim(),
+      api_key: $("#add-api-key").value.trim(),
+      notes: $("#add-notes").value.trim(),
+      check_after_save: forceCheck || $("#add-check-after").value === "1",
+    };
+    if (!payload.base_url || !payload.api_key) return toast("请填写 Base URL 和 API Key");
+    const result = await api("POST", "/api/keys", payload);
+    closeModal("modal-add");
+    if (payload.check_after_save) {
+      toast(`已添加 · ${formatCheckSummary(result)}`);
+    } else {
+      toast("已添加，稍后可手动检测");
+    }
+    await load();
+  }
+
+  return { open };
+}
