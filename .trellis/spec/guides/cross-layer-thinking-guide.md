@@ -336,7 +336,7 @@ Map generic ?layers? onto this repo:
 UI (static/js) 
   -- JSON snake_case --> api/router.py + validators
   -- orchestration --> services/* 
-  -- pure I/O --> core.py (HTTP to AI providers) / db.py (SQLite)
+  -- pure I/O --> core/ (HTTP to AI providers) / db.py (SQLite)
 ```
 
 High-risk boundaries:

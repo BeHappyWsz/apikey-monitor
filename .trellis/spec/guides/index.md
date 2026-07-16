@@ -52,7 +52,7 @@ These guides help you **ask the right questions before coding**.
 
 ### When to Think About Code Reuse
 
-- [ ] Writing logic similar to `core.py` / `state.js` / `utils.js`
+- [ ] Writing logic similar to `core/` / `state.js` / `utils.js`
 - [ ] New export format, import parser, or probe path
 - [ ] Copy-pasting mask/export/probe helpers
 

@@ -24,11 +24,11 @@ app.py
   |-- REST-like API
   |-- sync classify / async batch classify
   |
-  +--> core.py
-  |     |-- paste parser
-  |     |-- protocol classifier
-  |     |-- health checker
-  |     +-- config exporter
+  +--> core/  (package; import still `import core`)
+  |     |-- parse (IMPORTERS registry)
+  |     |-- protocols (PROTOCOL_PROBES registry)
+  |     |-- probe (classify / health / model)
+  |     +-- export (EXPORT_FORMATS registry)
   |
   +--> db.py
   |     +-- SQLite data access
@@ -43,14 +43,14 @@ app.py
 
 本地 Web 服务入口。负责静态资源返回、JSON API、请求参数校验、同步单条检测和后台批量检测调度。
 
-### `core.py`
+### `core/` package
 
-核心业务逻辑。负责：
+核心业务逻辑（纯函数，无 DB）。对外仍 `import core`。负责：
 
-- 从粘贴文本中解析候选 `base_url` 和 `api_key`。
-- 对 OpenAI 兼容接口调用 `/v1/models` 判别能力和模型列表。
-- 对 Anthropic 兼容接口调用 `/v1/messages` 做低成本探测。
-- 为 Claude Code 和 Codex CLI 生成环境变量片段。
+- 从粘贴文本 / JSON 备份解析候选 `base_url` 和 `api_key`（`parse` + `IMPORTERS`）。
+- 通过 `PROTOCOL_PROBES` 注册表做协议探测与模型检查（OpenAI / Anthropic）。
+- 通过 `EXPORT_FORMATS` 注册表导出 Claude Code / Codex / `.env` / PowerShell / JSON。
+- 扩展协议或导出格式时优先登记册，而不是堆进单一大文件。
 
 ### `db.py`
 

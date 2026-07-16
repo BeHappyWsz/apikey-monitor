@@ -18,7 +18,7 @@
 - Target Python **3.10+**; keep code readable over clever.
 - Prefer clear module boundaries (see [Directory Structure](./directory-structure.md)).
 - User-visible API error messages may be Chinese; codes stay ASCII `snake_case`.
-- Keep pure helpers in `core.py` / `db.py` unit-testable without HTTP when possible.
+- Keep pure helpers in `core/` / `db.py` unit-testable without HTTP when possible.
 - File encoding UTF-8; match existing module header style.
 
 ---
@@ -55,6 +55,8 @@ python -m unittest discover -s tests -v
 - Prefer temp `APIKEYCONFIG_DB_PATH` / `CONFIG_PATH` / `RUNTIME_DIR` (see integration test harness).
 - Do not assume port `7878` is free; allocate an ephemeral port.
 - Probe tests should not call real public AI APIs; use fakes/mocks or local handlers where the suite already does.
+- When mocking probe HTTP after the `core/` package split, patch **`core.http._request`** (module attribute). Protocol modules call `http_mod._request(...)`; patching a re-exported `core._request` name will not intercept calls.
+- Prefer `core.probe.model_check` when stubbing model checks used by `classify`.
 
 When changing:
 

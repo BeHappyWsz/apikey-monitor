@@ -25,14 +25,14 @@ class CoreTests(unittest.TestCase):
     def test_anthropic_401_is_auth_error(self):
         responses = [(404, "", 1, "HTTP 404"), (404, "", 1, "HTTP 404"),
                      (401, '{"error":{"message":"invalid api key"}}', 2, "HTTP 401")]
-        with patch("core._request", side_effect=responses):
+        with patch("core.http._request", side_effect=responses):
             result = core.classify("https://example.com", "sk-test")
         self.assertEqual(result["status"], "auth_error")
         self.assertTrue(result["supports_anthropic"])
 
     def test_mixed_protocol_auth_and_success_is_up(self):
         responses = [(401, "", 2, "HTTP 401"), (200, "{}", 3, None)]
-        with patch("core._request", side_effect=responses):
+        with patch("core.http._request", side_effect=responses):
             result = core.classify("https://example.com", "sk-test")
         self.assertEqual(result["status"], "up")
         self.assertTrue(result["supports_openai"])
@@ -50,13 +50,13 @@ class CoreTests(unittest.TestCase):
 
     def test_both_protocols_auth_failure(self):
         responses = [(401, "", 1, "HTTP 401"), (403, "", 2, "HTTP 403")]
-        with patch("core._request", side_effect=responses):
+        with patch("core.http._request", side_effect=responses):
             result = core.classify("https://example.com", "sk-test")
         self.assertEqual(result["status"], "auth_error")
 
     def test_model_result_does_not_replace_protocol_status(self):
         responses = [(200, '{"data":[]}', 1, None), (404, "", 1, "HTTP 404"), (404, "", 1, "HTTP 404")]
-        with patch("core._request", side_effect=responses), patch("core.model_check", return_value={
+        with patch("core.http._request", side_effect=responses), patch("core.probe.model_check", return_value={
             "model_status": "auth_error", "model_latency_ms": 9, "model_error": "model rejected"}):
             result = core.classify("https://example.com", "sk-test", check_model="gpt-test")
         self.assertEqual(result["status"], "up")
@@ -111,6 +111,16 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(back[0]["base_url"], "https://example.com/v1")
         self.assertEqual(back[0]["api_key"], "sk-demo-key-xx")
         self.assertEqual(back[0]["check_model"], "m")
+
+
+
+    def test_registries_expose_builtin_extensions(self):
+        self.assertEqual(core.list_protocol_names(), ["openai", "anthropic"])
+        self.assertIn("claude", core.list_export_formats())
+        self.assertIn("json", core.EXPORT_FORMATS)
+        self.assertTrue(core.IMPORTERS)
+        with self.assertRaises(ValueError):
+            core.export_config({"base_url": "https://example.com", "api_key": "k"}, "nope")
 
 
 class DbTests(unittest.TestCase):

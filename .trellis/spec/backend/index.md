@@ -9,7 +9,7 @@
 Single-repo, **zero third-party Python dependency** local tool:
 
 - Python **3.10+** standard library (`http.server`, `sqlite3`, `urllib`, `threading`, ?).
-- Layering: `api/` (HTTP) ? `services/` (orchestration) ? `core.py` / `db.py` / `monitor.py`.
+- Layering: `api/` (HTTP) ? `services/` (orchestration) ? `core/` / `db.py` / `monitor.py`.
 - Secrets in SQLite **plaintext** today; list/detail APIs must stay masked.
 
 Prefer extending current modules over inventing frameworks. For multi-machine setup, also read [Local Development & Portability](../guides/local-dev-and-portability.md).

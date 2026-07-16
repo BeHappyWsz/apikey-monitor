@@ -126,7 +126,7 @@ https://api.example.com sk-xxxx
 | `data.db` | SQLite，**首次启动自动创建，勿提交到 Git** |
 | `config.json` | 默认配置模板（无密钥）；页面修改会写入数据库覆盖 |
 | `app.py` | 入口与 HTTP 生命周期 |
-| `core.py` | 解析、探活、导出 |
+| `core/` | 解析、探活、导出 |
 | `db.py` | SQLite / 配置 |
 | `api/` | 路由与校验 |
 | `services/` | Key / 任务 / 设置 / 重启 |
