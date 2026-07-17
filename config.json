@@ -11,6 +11,5 @@
   "ui_refresh_interval_sec": "60",
   "webdav_server": "https://dav.jianguoyun.com/dav/",
   "webdav_username": "",
-  "webdav_remote_path": "apikey-monitor/backup.json",
-  "webdav_last_sync": "download:replace|count=7|skipped=0|ts=1784277520"
+  "webdav_remote_path": "apikey-monitor/backup.json"
 }
