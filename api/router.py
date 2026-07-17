@@ -40,6 +40,8 @@ def route(method, path, query, body, server):
         }
     if method == "GET" and path == "/api/keys":
         return 200, KEYS.list()
+    if method == "GET" and path == "/api/keys/revision":
+        return 200, {"revision": db.get_list_revision()}
     if method == "GET" and path == "/api/settings":
         return 200, SETTINGS.get()
     match = _TASK_RE.fullmatch(path)

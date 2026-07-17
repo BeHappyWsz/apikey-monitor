@@ -1,0 +1,44 @@
+{
+  "id": "multi-device-webdav-sync",
+  "name": "multi-device-webdav-sync",
+  "title": "多机数据共享与坚果云 WebDAV 同步",
+  "description": "Multi-device data sharing via JSON backup and optional Nutstore WebDAV upload/download (parked backlog)",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "BeHappyWsz",
+  "assignee": "BeHappyWsz",
+  "createdAt": "2026-07-17",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "README.md",
+    "CHANGELOG.md",
+    "docs/design.md",
+    "db.py",
+    "config.json",
+    "static/js/settings.js",
+    "services/",
+    "core/"
+  ],
+  "notes": "PARKED backlog. Do not start until user unparks. PRD filled 2026-07-17 with Phase 0/1/2 plan (docs + WebDAV MVP + optional encrypt).",
+  "meta": {
+    "parked": true,
+    "parked_reason": "User asked to record as future todo; no implementation now.",
+    "phases": [
+      "docs-multi-device",
+      "webdav-mvp",
+      "webdav-ux-encrypt"
+    ],
+    "priority_note": "P2; after current unreleased polish / releases as needed"
+  }
+}

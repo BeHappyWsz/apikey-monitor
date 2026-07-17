@@ -147,6 +147,12 @@ def model_check(base_url, api_key, model, supports_openai=False, supports_anthro
 
 
 def health_check(base_url, api_key, supports_openai=False, supports_anthropic=False, timeout=15, check_model="", check_path=""):
+    """Lightweight scheduled probe: connectivity only (known protocols).
+
+    Does **not** run model_check even when check_model is set — model probing is
+    reserved for classify / manual model detection so monitor traffic stays cheap.
+    check_model is accepted for call-site compatibility and ignored.
+    """
     try:
         base = normalize_base_url(base_url)
     except ValueError as exc:
@@ -157,22 +163,10 @@ def health_check(base_url, api_key, supports_openai=False, supports_anthropic=Fa
     # When capabilities are already known, preserve supports_* even if this tick fails
     # so we do not fall back into full-protocol rediscovery (policy A).
     preserve = bool(supports_openai or supports_anthropic)
-    result = _result_from_protocols(
+    return _result_from_protocols(
         protocols,
         supports_openai=supports_openai,
         supports_anthropic=supports_anthropic,
         probed_names=names,
         preserve_supports=preserve,
     )
-    if check_model:
-        result.update(
-            model_check(
-                base,
-                api_key,
-                check_model,
-                result["supports_openai"],
-                result["supports_anthropic"],
-                timeout,
-            )
-        )
-    return result

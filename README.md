@@ -67,6 +67,8 @@ chmod +x start.sh   # 首次
 
 脚本会切换到仓库根目录，优先使用 `python3`，否则 `python`。额外参数会传给 `app.py`。
 
+定时监测仅做连通性探活（不附带模型探测）；前端 silent 刷新通过 `GET /api/keys/revision` 短路无变化请求。
+
 重复启动时，`app.py` 会读取 `.runtime/server.pid`：若检测到本工具旧实例仍在运行，会先关闭再启动，减少端口残留。
 
 ### 端口与监听

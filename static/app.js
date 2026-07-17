@@ -16,6 +16,7 @@ const state = {
   checking: new Set(), editId: null, exportId: null, exportMode: "single", modelId: null,
   candidates: [], candidateSelected: new Set(), settings: {}, runtime: {}, draggingId: null,
   fingerprint: "",
+  revision: "",
 };
 
 async function api(method, path, body, options) {
@@ -37,6 +38,17 @@ async function load({ silent = false } = {}) {
     listUi.render();
   }
   try {
+    // Silent path: cheap revision probe first — skip full list when unchanged.
+    if (silent && !state.checking.size) {
+      try {
+        const revResult = await request("GET", "/api/keys/revision", undefined, { latest: true });
+        if (!revResult.isLatest()) return;
+        const rev = String(revResult.payload?.revision || "");
+        if (rev && rev === state.revision) return;
+      } catch {
+        // Fall through to full list load on revision errors.
+      }
+    }
     const result = await request("GET", "/api/keys", undefined, { latest: true });
     if (!result.isLatest()) return;
     const nextKeys = result.payload;
@@ -46,6 +58,13 @@ async function load({ silent = false } = {}) {
     state.fingerprint = nextFingerprint;
     state.loading = false;
     state.loadError = "";
+    // Refresh revision token after a successful full fetch (monitor writes bump it).
+    try {
+      const revResult = await request("GET", "/api/keys/revision", undefined, { latest: true });
+      if (revResult.isLatest()) state.revision = String(revResult.payload?.revision || "");
+    } catch {
+      state.revision = nextFingerprint;
+    }
     if (unchanged) {
       listUi.renderStats();
       listUi.renderFilterCounts();
@@ -123,7 +142,7 @@ function applyUiRefreshInterval(sec) {
 }
 
 function applyUiRefreshFromSettings(settings) {
-  const sec = settings?.ui_refresh_interval_sec ?? 5;
+  const sec = settings?.ui_refresh_interval_sec ?? 15;
   applyUiRefreshInterval(sec);
 }
 
@@ -137,7 +156,7 @@ async function boot() {
     state.settings = settings || {};
     applyUiRefreshFromSettings(state.settings);
   } catch {
-    applyUiRefreshInterval(5);
+    applyUiRefreshInterval(15);
   }
   await load();
 }

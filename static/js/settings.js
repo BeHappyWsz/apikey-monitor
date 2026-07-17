@@ -35,7 +35,7 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
     $("#set-down").value = settings.down_recheck_interval_sec;
     $("#set-conc").value = settings.concurrency;
     $("#set-timeout").value = settings.request_timeout_sec;
-    $("#set-ui-refresh").value = settings.ui_refresh_interval_sec ?? 5;
+    $("#set-ui-refresh").value = settings.ui_refresh_interval_sec ?? 15;
     openModal("modal-monitor-settings");
   });
 

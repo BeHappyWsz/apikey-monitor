@@ -15,8 +15,42 @@ _FALLBACK_DEFAULTS = {
     "global_monitor_enabled": "1", "global_interval_sec": "300",
     "down_recheck_interval_sec": "120", "concurrency": "8",
     "request_timeout_sec": "15", "auto_classify_on_add": "1",
-    "ui_refresh_interval_sec": "5",
+    "ui_refresh_interval_sec": "15",
 }
+
+
+_list_generation = 0
+
+
+def touch_list_generation():
+    """Bump in-process generation so clients notice list mutations quickly."""
+    global _list_generation
+    _list_generation += 1
+    return _list_generation
+
+
+def get_list_revision():
+    """Cheap opaque revision for frontend short-circuit polling.
+
+    Combines process-local generation with DB stamps so monitor status writes
+    and CRUD both change the token without shipping the full key list.
+    """
+    with connection() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS c,
+                   COALESCE(MAX(last_check_at), 0) AS max_lc,
+                   COALESCE(MAX(model_last_check_at), 0) AS max_mlc,
+                   COALESCE(MAX(id), 0) AS max_id,
+                   COALESCE(SUM(sort_order), 0) AS sum_sort,
+                   COALESCE(SUM(monitor_enabled), 0) AS mon
+            FROM keys
+            """
+        ).fetchone()
+    return (
+        f"{_list_generation}:{row['c']}:{row['max_lc']}:{row['max_mlc']}:"
+        f"{row['max_id']}:{row['sum_sort']}:{row['mon']}"
+    )
 
 
 def _load_defaults():
@@ -185,7 +219,9 @@ def add_key(data):
             (data.get("name", ""), data["base_url"], data["api_key"], "unknown",
              int(bool(data.get("monitor_enabled", 1))), data.get("interval_sec"), data.get("notes", ""),
              int(time.time()), data.get("check_model", ""), sort_order, data.get("check_path", "")))
-        return cur.lastrowid
+        key_id = cur.lastrowid
+    touch_list_generation()
+    return key_id
 
 
 def add_keys_batch(items):
@@ -208,6 +244,7 @@ def add_keys_batch(items):
                  int(time.time()), item.get("check_model", ""), sort_order, item.get("check_path", "")))
             ids.append(cur.lastrowid)
             sort_order += 10
+        touch_list_generation()
     return ids, skipped_duplicate
 
 def _next_sort_order(conn):
@@ -235,6 +272,7 @@ def reorder_keys(ids):
         final_ids = requested + [key_id for key_id in existing if key_id not in requested_set]
         for index, key_id in enumerate(final_ids, start=1):
             conn.execute("UPDATE keys SET sort_order=? WHERE id=?", (index * 10, key_id))
+    touch_list_generation()
     return final_ids
 
 
@@ -253,7 +291,10 @@ def update_key(key_id, data):
                        "model_latency_ms=NULL", "model_last_check_at=NULL", "model_last_error=''"])
     with connection(write=True) as conn:
         cur = conn.execute(f"UPDATE keys SET {', '.join(fields)} WHERE id=?", (*values, key_id))
-        return cur.rowcount > 0
+        ok = cur.rowcount > 0
+    if ok:
+        touch_list_generation()
+    return ok
 
 
 def delete_keys(ids):
@@ -261,7 +302,10 @@ def delete_keys(ids):
         return 0
     with connection(write=True) as conn:
         marks = ",".join("?" for _ in ids)
-        return conn.execute(f"DELETE FROM keys WHERE id IN ({marks})", list(ids)).rowcount
+        count = conn.execute(f"DELETE FROM keys WHERE id IN ({marks})", list(ids)).rowcount
+    if count:
+        touch_list_generation()
+    return count
 
 
 def update_status(key_id, status, latency_ms, error, supports_anthropic=None, supports_openai=None, models=None):
@@ -275,6 +319,7 @@ def update_status(key_id, status, latency_ms, error, supports_anthropic=None, su
         sets.append("models=?"); values.append(json.dumps(models[:200], ensure_ascii=False))
     with connection(write=True) as conn:
         conn.execute(f"UPDATE keys SET {', '.join(sets)} WHERE id=?", (*values, key_id))
+    touch_list_generation()
 
 
 def update_model_status(key_id, status, latency_ms, error):
@@ -282,9 +327,14 @@ def update_model_status(key_id, status, latency_ms, error):
         conn.execute("""UPDATE keys SET model_status=?, model_latency_ms=?, model_last_error=?,
                       model_last_check_at=? WHERE id=?""",
                      (status, latency_ms, (error or "")[:300], int(time.time()), key_id))
+    touch_list_generation()
 
 
-def get_due_keys(now, up_interval, down_interval):
+def get_due_keys(now, up_interval, down_interval, limit=None):
+    """Return monitor-enabled keys that are due, oldest last_check_at first.
+
+    limit: optional max rows (used by monitor tick cap / jitter-by-batch).
+    """
     with connection() as conn:
         rows = conn.execute("SELECT * FROM keys WHERE monitor_enabled=1").fetchall()
     due = []
@@ -293,4 +343,12 @@ def get_due_keys(now, up_interval, down_interval):
         interval = item.get("interval_sec") or (down_interval if item["status"] == "down" else up_interval)
         if now - (item.get("last_check_at") or 0) >= int(interval):
             due.append(item)
+    due.sort(key=lambda item: (item.get("last_check_at") or 0, item.get("id") or 0))
+    if limit is not None:
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            limit = None
+        if limit is not None and limit >= 0:
+            due = due[:limit]
     return due

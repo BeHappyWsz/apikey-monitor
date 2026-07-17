@@ -103,6 +103,30 @@ class ProtocolSelectionTests(unittest.TestCase):
         self.assertTrue(any("messages" in url for url in calls))
 
 
+    def test_health_skips_model_check_even_with_check_model(self):
+        """Monitor path must not issue chat/model probes when check_model is set."""
+        calls = []
+
+        def fake_request(method, url, headers, body, timeout):
+            calls.append(url)
+            if "models" in url:
+                return 200, '{"data":[]}', 1, None
+            return 200, "{}", 1, None
+
+        with patch("core.http._request", side_effect=fake_request):
+            result = core.health_check(
+                "https://example.com",
+                "sk-test",
+                supports_openai=True,
+                supports_anthropic=False,
+                check_model="gpt-4o",
+            )
+        self.assertEqual(result["status"], "up")
+        self.assertEqual(result.get("model_status"), "unknown")
+        # No chat-style model probe body; only connectivity (models list / messages for anthropic)
+        self.assertTrue(all("chat/completions" not in url for url in calls))
+        self.assertTrue(result.get("model_error") in (None, ""))
+
 class InstanceHelpersTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

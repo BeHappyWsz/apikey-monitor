@@ -7,7 +7,7 @@ from api import validators
 class UiRefreshSettingsTest(unittest.TestCase):
     def test_default_and_valid(self):
         out = validators.settings_payload({})
-        self.assertEqual(out["ui_refresh_interval_sec"], "5")
+        self.assertEqual(out["ui_refresh_interval_sec"], "15")
         out = validators.settings_payload({"ui_refresh_interval_sec": "0"})
         self.assertEqual(out["ui_refresh_interval_sec"], "0")
         out = validators.settings_payload({"ui_refresh_interval_sec": "30"})

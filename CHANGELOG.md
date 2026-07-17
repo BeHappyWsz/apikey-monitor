@@ -4,7 +4,17 @@
 
 ## [Unreleased]
 
-> 相对 [0.1.0] 的变更汇总。内容已与代码对齐，可直接作为 `0.1.1` 发布说明使用（版本号与 tag 待你确认后再 bump）。
+### Planned（可选增强，非承诺）
+
+- 可选密钥落盘加密（仍依赖本机目录权限；非必做）
+- 监测历史 / 告警等体验增强（按需）
+- 第三协议端到端（如 Gemini）：待产品选型后再开任务
+- **多机数据共享 / 坚果云 WebDAV 同步**（对标 cc-switch 式上传下载；任务 `07-17-multi-device-webdav-sync`，已 park，分期：文档约定 → WebDAV MVP → 可选加密与提示）
+- 中期效率：thin list payload、按 id 局部 DOM 补丁、SQL 侧 due 过滤、问题状态再检策略、SSE 推送（见 `docs/design.md`）
+
+## [0.1.1] - 2026-07-17
+
+相对 [0.1.0] 的维护与效率增强版本。
 
 ### Added
 
@@ -12,6 +22,7 @@
 - 系统设置打开时即显示 `0.0.0.0` 局域网风险提示；保存确认文案对齐
 - 每条 Key 可选 **`check_path`**（仅相对路径）：覆盖 classify / health 探活默认入口；模型探测仍用内置 chat/messages 路径
 - `check_path` 贯通：DB 迁移、API 校验、导入/导出 JSON、编辑页
+- 列表 revision 短轮询：`GET /api/keys/revision`；前端 silent 刷新先比 revision 再拉全量
 
 ### Changed
 
@@ -22,16 +33,14 @@
 - `config.json` 作为运行时设置的原子写入目标（页面改设置后落盘）
 - 定时监测（`health_check`）仅探测已成功协议；首次/均未成功时全量；失败不兜底其它协议，保留 `supports_*`（手动检测仍全量 `classify`）
 - 启动前单实例收敛：`.runtime/server.pid`；重复启动先停旧实例再 bind
+- 监测效率：定时 `health_check` 不再附带 `model_check`（模型仅手动/classify）
+- 监测调度：tick 防重叠（in-flight）、每 tick 上限 `concurrency×2`、due 按最久未检优先
+- 默认列表刷新间隔 15s（仍可 0 关闭）
+- 卡片整卡拖拽排序；移除拖拽手柄与卡片上 Codex/Claude 快捷按钮（导出仍走弹窗）
 
 ### Fixed
 
 - 状态为 `up` 时清理残留探活错误：只聚合「最终胜出协议」的错误，避免 OpenAI-only 端点仍显示 Anthropic 404；`up` 卡片隐藏错误行；列表指纹纳入 `model_last_error`
-
-### Planned（可选增强，非承诺）
-
-- 可选密钥落盘加密（仍依赖本机目录权限；非必做）
-- 监测历史 / 告警等体验增强（按需）
-- 第三协议端到端（如 Gemini）：待产品选型后再开任务
 
 ## [0.1.0] - 2026-07-16
 
@@ -64,5 +73,6 @@
 - JSON 导出字段精简为可移植配置：`name`、`base_url`、`api_key`、`check_model`
 - 导出弹窗布局优化
 
-[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.1
 [0.1.0]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.0

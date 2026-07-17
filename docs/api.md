@@ -14,6 +14,7 @@ http://127.0.0.1:7878
 
 ```http
 GET /api/keys
+GET /api/keys/revision
 ```
 
 > 列表与单条详情默认脱敏：响应不含明文 `api_key`，仅含 `api_key_masked`、`has_api_key`。完整密钥见 `/secret` 或导出接口。
