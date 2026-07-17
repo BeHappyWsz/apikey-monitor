@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
-- **Last Active**: 2026-07-16
+- **Total Sessions**: 3
+- **Last Active**: 2026-07-17
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~90 | Active |
+| `journal-1.md` | ~143 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-07-17 | Release v0.1.1 monitor efficiency and protocol-aware ops | `b22ebaf`, `b7bca4c`, `48ee6af`, `a4023fc` | `main` |
 | 2 | 2026-07-16 | Wave2: frontend split + custom check_path | `0802b48`, `50c03d8` | `main` |
 | 1 | 2026-07-16 | Progressive core package refactor | `dc49611` | `main` |
 <!-- @@@/auto:session-history -->

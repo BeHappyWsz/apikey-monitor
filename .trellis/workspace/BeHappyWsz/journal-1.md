@@ -88,3 +88,45 @@ Skipped third protocol (parked as future). Split static/app.js into cards/list_u
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Release v0.1.1 monitor efficiency and protocol-aware ops
+
+**Date**: 2026-07-17
+**Task**: Release v0.1.1 monitor efficiency and protocol-aware ops
+**Branch**: `main`
+
+### Summary
+
+Published v0.1.1: monitor efficiency, protocol-aware probes, single-instance restart; pushed tag and GitHub Release; feature tasks already archived; WebDAV/third-protocol remain parked.
+
+### Main Changes
+
+- Shipped monitor efficiency: health_check without model_check; GET /api/keys/revision silent poll; tick in-flight guard; due batch cap concurrency*2
+- Protocol-aware probes + single-instance restart (`.runtime/server.pid`); whole-card drag; default UI refresh 15s
+- Parked multi-device WebDAV sync as PRD backlog (`07-17-multi-device-webdav-sync`); third-protocol e2e remains parked
+- Bumped version.py to 0.1.1; CHANGELOG [0.1.1]; annotated tag + GitHub Release (Latest)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b22ebaf` | release: v0.1.1 monitor efficiency and protocol-aware ops |
+| `b7bca4c` | feat: protocol-aware monitor probes, single-instance restart, simplify cards |
+| `48ee6af` | fix: clear residual probe errors when status is up |
+| `a4023fc` | chore(config): treat config.json as atomic runtime settings |
+
+### Testing
+
+- Unit tests for monitor efficiency / probe instance included in release tree
+- Remote verified: tag `v0.1.1` on origin; GitHub Release set Latest
+
+### Status
+
+[OK] **Completed** — code on origin/main; tag + GitHub release done; no active Trellis task for this ship
+
+### Next Steps
+
+- Keep parked: `07-16-third-protocol-e2e`, `07-17-multi-device-webdav-sync` until explicitly unparked
+- Unreleased items remain under CHANGELOG Planned
+
