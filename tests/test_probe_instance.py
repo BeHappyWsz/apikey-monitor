@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import core
+from core.protocols import anthropic as anthropic_mod
 from services import instance as instance_svc
 
 
@@ -131,6 +132,62 @@ class ProtocolSelectionTests(unittest.TestCase):
         # No chat-style model probe body; only connectivity (models list / messages for anthropic)
         self.assertTrue(all("chat/completions" not in url for url in calls))
         self.assertTrue(result.get("model_error") in (None, ""))
+
+class AnthropicRetryTests(unittest.TestCase):
+    """The anthropic capability probe retries transient failures (5xx / timeout)
+    so a working but flaky endpoint is confirmed by a clean 200 rather than a
+    single bad attempt."""
+
+    def _fake(self, responses):
+        calls = []
+        seq = iter(responses)
+
+        def request(method, url, headers, body, timeout):
+            calls.append(url)
+            try:
+                return next(seq)
+            except StopIteration:
+                return (0, "", 1, "exhausted")
+
+        return calls, request
+
+    def test_retries_5xx_then_succeeds(self):
+        calls, fake = self._fake([(502, "", 1, "HTTP 502"), (200, "{}", 5, None)])
+        with patch("core.http._request", side_effect=fake):
+            result = anthropic_mod.probe("https://example.com", "sk", 15)
+        self.assertEqual(result["status"], "up")
+        self.assertEqual(result["http_status"], 200)
+        self.assertGreater(len(calls), 1)
+
+    def test_retries_timeout_then_succeeds(self):
+        # both candidate URLs time out in attempt 1; retry succeeds on attempt 2
+        calls, fake = self._fake([(0, "", 1, "timeout"), (0, "", 1, "timeout"), (200, "{}", 5, None)])
+        with patch("core.http._request", side_effect=fake):
+            result = anthropic_mod.probe("https://example.com", "sk", 15)
+        self.assertEqual(result["status"], "up")
+        self.assertEqual(result["http_status"], 200)
+
+    def test_persistent_5xx_gives_up_degraded(self):
+        calls, fake = self._fake([(502, "", 1, "HTTP 502")] * 5)
+        with patch("core.http._request", side_effect=fake):
+            result = anthropic_mod.probe("https://example.com", "sk", 15)
+        self.assertEqual(result["status"], "degraded")
+        self.assertEqual(len(calls), 3)  # initial + 2 retries, one URL each
+
+    def test_no_retry_on_auth(self):
+        calls, fake = self._fake([(401, "", 1, "HTTP 401")])
+        with patch("core.http._request", side_effect=fake):
+            result = anthropic_mod.probe("https://example.com", "sk", 15)
+        self.assertEqual(result["status"], "auth_error")
+        self.assertEqual(len(calls), 1)
+
+    def test_no_retry_on_404(self):
+        calls, fake = self._fake([(404, "", 1, "HTTP 404")] * 6)
+        with patch("core.http._request", side_effect=fake):
+            result = anthropic_mod.probe("https://example.com", "sk", 15)
+        self.assertEqual(result["status"], "down")
+        self.assertEqual(len(calls), 2)  # both candidate URLs once, no retry
+
 
 class InstanceHelpersTests(unittest.TestCase):
     def setUp(self):

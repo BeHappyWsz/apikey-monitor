@@ -4,7 +4,7 @@
   "global_interval_sec": "300",
   "down_recheck_interval_sec": "120",
   "concurrency": "8",
-  "request_timeout_sec": "15",
+  "request_timeout_sec": "45",
   "auto_classify_on_add": "1",
   "server_host": "127.0.0.1",
   "server_port": "7879",

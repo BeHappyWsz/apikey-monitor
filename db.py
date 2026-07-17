@@ -13,7 +13,7 @@ _FALLBACK_DEFAULTS = {
     "server_host": "127.0.0.1", "server_port": "7878",
     "global_monitor_enabled": "1", "global_interval_sec": "300",
     "down_recheck_interval_sec": "120", "concurrency": "8",
-    "request_timeout_sec": "15", "auto_classify_on_add": "1",
+    "request_timeout_sec": "45", "auto_classify_on_add": "1",
     "ui_refresh_interval_sec": "15",
 }
 
@@ -106,6 +106,13 @@ def _migrate(conn):
     # webdav_last_sync was renamed to "_webdav_last_sync" (runtime state) so it
     # stays out of the /api/settings surface. Drop legacy unprefixed rows.
     conn.execute("DELETE FROM settings WHERE k = 'webdav_last_sync'")
+    # request_timeout_sec default 15 -> 30: a real /messages generation on slow
+    # or reasoning gateways takes 5-20s (occasionally ~30s); the old 15s default
+    # timed out and falsely marked working Anthropic endpoints as unsupported.
+    # Bump only the untouched old default so explicit user values are preserved.
+    _to_row = conn.execute("SELECT v FROM settings WHERE k='request_timeout_sec'").fetchone()
+    if _to_row and str(_to_row["v"]) == "15":
+        conn.execute("UPDATE settings SET v='45' WHERE k='request_timeout_sec'")
 
 
 def init_db():

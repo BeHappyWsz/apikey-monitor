@@ -7,6 +7,14 @@ from core.protocol_base import _protocol_result, _record_http
 from core.urls import candidate_urls, probe_urls
 
 
+_MAX_ATTEMPTS = 3  # initial probe + up to 2 retries on transient failures
+
+
+def _is_transient(code):
+    """Failures worth retrying: timeout/connection error (0) or server 5xx."""
+    return code == 0 or code >= 500
+
+
 def probe(base, api_key, timeout, check_path=""):
     result = _protocol_result("anthropic")
     headers = {
@@ -18,13 +26,21 @@ def probe(base, api_key, timeout, check_path=""):
     body = {
         "model": "claude-3-5-haiku-20241022",
         "max_tokens": 1,
-        "messages": [{"role": "user", "content": "ping"}],
+        "messages": [{"role": "user", "content": "hi"}],
     }
-    for url in probe_urls(base, "messages", check_path):
-        code, raw, ms, err = http_mod._request("POST", url, headers, body, timeout)
-        _record_http(result, code, raw, ms, err, validation_400=True)
-        if code != 404 and code != 0:
-            break
+    # A real /messages generation can be slow or intermittently fail (5xx /
+    # timeout) on reasoning gateways; retry transient failures so a working
+    # endpoint is confirmed by a clean 200 rather than a single flaky attempt.
+    # Definitive outcomes (200 / 4xx / 401 / 403 / 404) return at once.
+    urls = probe_urls(base, "messages", check_path)
+    for _ in range(_MAX_ATTEMPTS):
+        for url in urls:
+            code, raw, ms, err = http_mod._request("POST", url, headers, body, timeout)
+            _record_http(result, code, raw, ms, err, validation_400=True)
+            if code != 404 and code != 0:
+                break
+        if result["status"] == "up" or not _is_transient(result["http_status"]):
+            return result
     return result
 
 

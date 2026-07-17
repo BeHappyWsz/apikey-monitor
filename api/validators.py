@@ -81,7 +81,7 @@ def settings_payload(data, current=None):
         "global_interval_sec": str(normalize_int(data.get("global_interval_sec", current.get("global_interval_sec", 300)), 300, 30, 86400)),
         "down_recheck_interval_sec": str(normalize_int(data.get("down_recheck_interval_sec", current.get("down_recheck_interval_sec", 120)), 120, 30, 86400)),
         "concurrency": str(normalize_int(data.get("concurrency", current.get("concurrency", 8)), 8, 1, 32)),
-        "request_timeout_sec": str(normalize_int(data.get("request_timeout_sec", current.get("request_timeout_sec", 15)), 15, 3, 120)),
+        "request_timeout_sec": str(normalize_int(data.get("request_timeout_sec", current.get("request_timeout_sec", 45)), 45, 3, 120)),
         "auto_classify_on_add": "1" if str(data.get("auto_classify_on_add", current.get("auto_classify_on_add", "1"))).lower() in ("1", "true") else "0",
         "ui_refresh_interval_sec": str(_normalize_ui_refresh(data.get("ui_refresh_interval_sec", current.get("ui_refresh_interval_sec", 15)))),
     }

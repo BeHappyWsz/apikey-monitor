@@ -174,7 +174,7 @@
       <label><span>检测间隔（秒）</span><input type="number" id="set-interval" min="30"></label>
       <label><span>离线复检间隔（秒）</span><input type="number" id="set-down" min="30"></label>
       <label><span>并发数</span><input type="number" id="set-conc" min="1" max="32"></label>
-      <label><span>请求超时（秒）</span><input type="number" id="set-timeout" min="3"></label>
+      <label><span>请求超时（秒，建议≥45）</span><input type="number" id="set-timeout" min="3" title="慢或推理型网关建议 ≥45 秒；设置过低会让可用端点在真实生成完成前超时，从而被误判为「不支持」"></label>
       <label><span>列表刷新间隔（秒，0=关闭）</span><input type="number" id="set-ui-refresh" min="0" max="3600" step="1" title="0关闭定时刷新；否则 3–3600 秒"></label>
       </div>
     </div>
