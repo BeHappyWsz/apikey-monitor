@@ -4,21 +4,32 @@
 
 ## [Unreleased]
 
+> 相对 [0.1.0] 的变更汇总。内容已与代码对齐，可直接作为 `0.1.1` 发布说明使用（版本号与 tag 待你确认后再 bump）。
+
 ### Added
 
 - macOS / Linux 启动脚本 `start.sh`（`--no-browser`，可选 `--bg`，优先 `python3`）
 - 系统设置打开时即显示 `0.0.0.0` 局域网风险提示；保存确认文案对齐
-- README / 设计文档 / 启动路径与 CHANGELOG 同步
+- 每条 Key 可选 **`check_path`**（仅相对路径）：覆盖 classify / health 探活默认入口；模型探测仍用内置 chat/messages 路径
+- `check_path` 贯通：DB 迁移、API 校验、导入/导出 JSON、编辑页
 
 ### Changed
 
+- **`core.py` → `core/` 包**：保持 `import core` 稳定；新增 `PROTOCOL_PROBES` / `EXPORT_FORMATS` / `IMPORTERS` 注册表，便于后续扩展协议与导出格式
+- **前端模块拆分**：`static/app.js` 瘦身为编排层；列表/卡片/导出/操作等拆到 `static/js/*`（行为不变）
 - 文档收口：明确本机单用户定位；**不做** Web 访问密码 / 公网鉴权；路线图去掉误导项
+- README / 设计文档 / 启动路径与 CHANGELOG 同步
+- `config.json` 作为运行时设置的原子写入目标（页面改设置后落盘）
+
+### Fixed
+
+- 状态为 `up` 时清理残留探活错误：只聚合「最终胜出协议」的错误，避免 OpenAI-only 端点仍显示 Anthropic 404；`up` 卡片隐藏错误行；列表指纹纳入 `model_last_error`
 
 ### Planned（可选增强，非承诺）
 
 - 可选密钥落盘加密（仍依赖本机目录权限；非必做）
 - 监测历史 / 告警等体验增强（按需）
-
+- 第三协议端到端（如 Gemini）：待产品选型后再开任务
 
 ## [0.1.0] - 2026-07-16
 

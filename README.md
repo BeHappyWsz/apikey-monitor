@@ -12,6 +12,7 @@
 - **粘贴导入**：从环境变量、curl、纯文本解析 `base_url` + `api_key`；预览可改名称/URL/Key；结果展示新增 / 跳过重复 / 无效
 - **手动添加**：单条填写，可选保存后立即检测
 - **协议判别**：自动识别 OpenAI / Anthropic 能力
+- **自定义探活路径**：每条 Key 可选相对路径 `check_path`，覆盖连通性/协议探测默认入口（模型探测仍用内置路径）
 - **定时监测**：连通性、认证状态、延迟；支持全局与单条开关
 - **Web 管理**：筛选、批量检测/删除、拖拽排序、编辑、导出
 - **批量任务**：导入/批量检测显示进度与失败数
@@ -20,6 +21,7 @@
 - **列表脱敏**：列表/详情不返回明文 Key；卡片可一键复制完整 Key（按需取 secret）
 - **JSON 备份/恢复**：备份全部为 JSON；粘贴导入可直接识别同格式 JSON
 - **安全换端口**：先释放旧端口再启新端口，失败自动回滚
+- **跨平台启动**：Windows `start.vbs`；macOS/Linux `start.sh`（可选后台）
 
 ## 环境要求
 
@@ -103,7 +105,7 @@ https://api.example.com sk-xxxx
 | Claude Code | Anthropic 环境变量 |
 | Codex CLI | OpenAI 兼容环境变量 |
 | `.env` / PowerShell | 本地脚本 |
-| JSON | 单条或**批量**；字段仅 `name` / `base_url` / `api_key` / `check_model` |
+| JSON | 单条或**批量**；字段 `name` / `base_url` / `api_key` / `check_model` / `check_path` |
 
 导出与复制会包含**完整 API Key**，注意屏幕共享与日志。
 
@@ -113,7 +115,7 @@ https://api.example.com sk-xxxx
 
 - 监听地址和端口
 - 全局监测开关
-- 列表自动刷新间隔（默认 5 秒，0=关闭）
+- 列表自动刷新间隔（默认见 `config.json`，常见为 5–10 秒；`0`=关闭）
 - 正常间隔 / 离线复检间隔
 - 并发数、请求超时
 
@@ -124,14 +126,14 @@ https://api.example.com sk-xxxx
 | 路径 | 说明 |
 |------|------|
 | `data.db` | SQLite，**首次启动自动创建，勿提交到 Git** |
-| `config.json` | 默认配置模板（无密钥）；页面修改会写入数据库覆盖 |
+| `config.json` | 运行时设置（无密钥）；页面保存设置后与 DB 同步并**原子写入**本文件 |
 | `app.py` | 入口与 HTTP 生命周期 |
-| `core/` | 解析、探活、导出 |
+| `core/` | 解析、探活、导出（包结构 + 扩展注册表；`import core` 仍可用） |
 | `db.py` | SQLite / 配置 |
 | `api/` | 路由与校验 |
 | `services/` | Key / 任务 / 设置 / 重启 |
 | `monitor.py` | 定时调度 |
-| `static/` | 前端（原生 HTML/CSS/ESM） |
+| `static/` | 前端（原生 HTML/CSS/ESM；`app.js` + `js/*` 模块） |
 | `docs/` | API / 设计说明 |
 | `tests/` | 单元与集成测试 |
 | `start.vbs` | Windows 静默启动 |
@@ -161,6 +163,9 @@ python -m unittest discover -s tests -v
 
 # 前端语法检查（需 Node.js）
 node --check static/app.js
+node --check static/js/cards.js
+node --check static/js/list_ui.js
+node --check static/js/export_ui.js
 node --check static/js/editor.js
 node --check static/js/state.js
 

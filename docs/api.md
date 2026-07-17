@@ -330,7 +330,7 @@ GET /api/keys/export_all
 
 ```json
 {
-  "text": "[{\"name\":\"...\",\"base_url\":\"...\",\"api_key\":\"...\",\"check_model\":\"...\"}]",
+  "text": "[{\"name\":\"...\",\"base_url\":\"...\",\"api_key\":\"...\",\"check_model\":\"...\",\"check_path\":\"...\"}]",
   "count": 2,
   "fmt": "json"
 }
@@ -354,6 +354,11 @@ Content-Type: application/json
 
 返回 `candidates` 数组，元素含 `name`、`base_url`、`api_key`，以及可选的 `check_model`、`check_path`、`notes`。
 
-## Custom check path
+## 自定义探活路径 `check_path`
 
-Optional per-key field `check_path` (relative URL path under `base_url`). Empty uses built-in protocol endpoints. Absolute URLs are rejected. Applies to classify/health probes only (not model chat probes).
+每条 Key 可选字段 `check_path`：相对于 `base_url` 的 URL 路径（如 `v1/models`）。
+
+- 空字符串：使用各协议内置候选入口
+- 禁止绝对 URL（`http://` / `https://` 等）
+- **仅**作用于 classify / health 探活；**不**作用于模型 chat/messages 探测
+- 出现在：创建/更新 Key、JSON 导入/导出/备份、编辑表单
