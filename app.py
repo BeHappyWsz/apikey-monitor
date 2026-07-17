@@ -1,6 +1,7 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Application assembly and HTTP server lifecycle."""
 import argparse
+import sys
 import threading
 import time
 import webbrowser
@@ -9,6 +10,7 @@ from http.server import ThreadingHTTPServer
 import db
 import monitor
 from api.handler import Handler
+from services import instance as instance_svc
 
 
 class AppServer(ThreadingHTTPServer):
@@ -29,9 +31,23 @@ def main(argv=None):
     settings = db.get_all_settings()
     host = args.host or settings.get("server_host", "127.0.0.1")
     port = args.port or int(settings.get("server_port", 7878))
-    runtime = dict(settings); runtime.update(server_host=host, server_port=str(port))
-    server = AppServer((host, port), Handler)
+
+    try:
+        # Restart helper already stopped the old process; still clear stale pid.
+        instance_svc.ensure_single_instance(host, port, stop_previous=True)
+    except RuntimeError as exc:
+        print(f"[apiKeyConfig] 启动失败: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    runtime = dict(settings)
+    runtime.update(server_host=host, server_port=str(port))
+    try:
+        server = AppServer((host, port), Handler)
+    except OSError as exc:
+        print(f"[apiKeyConfig] 无法绑定 {host}:{port}: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
     server.runtime_settings = runtime
+    instance_svc.write_pid_record(host, port)
     monitor.start()
     display_host = "127.0.0.1" if host in ("0.0.0.0", "localhost") else host
     url = f"http://{display_host}:{port}"
@@ -45,7 +61,10 @@ def main(argv=None):
         print("\n[apiKeyConfig] 正在退出…")
     finally:
         monitor.stop()
-        server.server_close()
+        try:
+            server.server_close()
+        finally:
+            instance_svc.clear_pid_record(only_if_self=True)
 
 
 if __name__ == "__main__":

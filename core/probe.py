@@ -33,23 +33,62 @@ def _empty_result(error, supports_openai=False, supports_anthropic=False):
     }
 
 
-def classify(base_url, api_key, timeout=15, check_model="", check_path=""):
-    try:
-        base = normalize_base_url(base_url)
-    except ValueError as exc:
-        return _empty_result(str(exc))
-    if not api_key:
-        return _empty_result("missing api_key")
+def protocol_names_to_probe(supports_openai=False, supports_anthropic=False, mode="discover"):
+    """Select protocol names to probe.
 
-    protocols = [entry["probe"](base, api_key, timeout, check_path) for entry in PROTOCOL_PROBES]
+    mode="discover": always all registered protocols (manual classify).
+    mode="monitor": only known successful protocols; if none known, all
+    (first-time / never succeeded). Never falls back to other protocols
+    when a known one fails.
+    """
+    if mode == "discover":
+        return [entry["name"] for entry in PROTOCOL_PROBES]
+    known = []
+    if supports_openai:
+        known.append("openai")
+    if supports_anthropic:
+        known.append("anthropic")
+    if known:
+        # Preserve registry order among selected names.
+        order = {entry["name"]: index for index, entry in enumerate(PROTOCOL_PROBES)}
+        return sorted(known, key=lambda name: order.get(name, 999))
+    return [entry["name"] for entry in PROTOCOL_PROBES]
+
+
+def _run_probes(base, api_key, timeout, check_path, names):
+    protocols = []
+    for name in names:
+        entry = get_protocol(name)
+        protocols.append(entry["probe"](base, api_key, timeout, check_path))
+    return protocols
+
+
+def _result_from_protocols(protocols, supports_openai=False, supports_anthropic=False, probed_names=None, preserve_supports=False):
     status, latency, error = _aggregate(protocols)
     by_name = {p["protocol"]: p for p in protocols}
     openai = by_name.get("openai")
     anth = by_name.get("anthropic")
-    result = {
-        "supports_openai": bool(openai and openai["endpoint_exists"]),
-        "supports_anthropic": bool(anth and anth["endpoint_exists"]),
-        "models": openai["models"] if openai else [],
+    probed = set(probed_names or by_name.keys())
+
+    if preserve_supports:
+        # Monitor path: keep known capability flags; only refresh status/latency/error.
+        supports_openai_out = bool(supports_openai)
+        supports_anthropic_out = bool(supports_anthropic)
+    else:
+        if "openai" in probed:
+            supports_openai_out = bool(openai and openai.get("endpoint_exists"))
+        else:
+            supports_openai_out = bool(supports_openai)
+        if "anthropic" in probed:
+            supports_anthropic_out = bool(anth and anth.get("endpoint_exists"))
+        else:
+            supports_anthropic_out = bool(supports_anthropic)
+
+    models = openai["models"] if openai else []
+    return {
+        "supports_openai": supports_openai_out,
+        "supports_anthropic": supports_anthropic_out,
+        "models": models,
         "status": status,
         "latency_ms": latency,
         "error": error,
@@ -58,6 +97,19 @@ def classify(base_url, api_key, timeout=15, check_model="", check_path=""):
         "model_latency_ms": None,
         "model_error": None,
     }
+
+
+def classify(base_url, api_key, timeout=15, check_model="", check_path=""):
+    try:
+        base = normalize_base_url(base_url)
+    except ValueError as exc:
+        return _empty_result(str(exc))
+    if not api_key:
+        return _empty_result("missing api_key")
+
+    names = protocol_names_to_probe(mode="discover")
+    protocols = _run_probes(base, api_key, timeout, check_path, names)
+    result = _result_from_protocols(protocols, probed_names=names)
     if check_model:
         check = model_check(
             base,
@@ -82,11 +134,13 @@ def model_check(base_url, api_key, model, supports_openai=False, supports_anthro
         result.update(model_status="down", model_error="missing api_key or model")
         return result
 
+    names = protocol_names_to_probe(supports_openai, supports_anthropic, mode="monitor")
     protocols = []
-    if supports_openai or not (supports_openai or supports_anthropic):
-        protocols.append(get_protocol("openai")["model_probe"](base, api_key, model, timeout))
-    if supports_anthropic:
-        protocols.append(get_protocol("anthropic")["model_probe"](base, api_key, model, timeout))
+    for name in names:
+        entry = get_protocol(name)
+        model_probe = entry.get("model_probe")
+        if model_probe:
+            protocols.append(model_probe(base, api_key, model, timeout))
     status, latency, error = _aggregate(protocols or [_protocol_result("unknown")])
     result.update(model_status=status, model_latency_ms=latency, model_error=error)
     return result
@@ -98,32 +152,18 @@ def health_check(base_url, api_key, supports_openai=False, supports_anthropic=Fa
     except ValueError as exc:
         return _empty_result(str(exc), supports_openai, supports_anthropic)
 
-    protocols = []
-    openai_probe = get_protocol("openai")["probe"]
-    anth_probe = get_protocol("anthropic")["probe"]
-
-    if supports_openai or not (supports_openai or supports_anthropic):
-        protocols.append(openai_probe(base, api_key, timeout, check_path))
-    if supports_anthropic or not (supports_openai or supports_anthropic) or not any(p["status"] == "up" for p in protocols):
-        protocols.append(anth_probe(base, api_key, timeout, check_path))
-    if not any(p["protocol"] == "openai" for p in protocols) and not any(p["status"] == "up" for p in protocols):
-        protocols.append(openai_probe(base, api_key, timeout, check_path))
-
-    status, latency, error = _aggregate(protocols)
-    openai = next((p for p in protocols if p["protocol"] == "openai"), None)
-    anth = next((p for p in protocols if p["protocol"] == "anthropic"), None)
-    result = {
-        "supports_openai": openai["endpoint_exists"] if openai else supports_openai,
-        "supports_anthropic": anth["endpoint_exists"] if anth else supports_anthropic,
-        "models": openai["models"] if openai else [],
-        "status": status,
-        "latency_ms": latency,
-        "error": error,
-        "protocols": protocols,
-        "model_status": "unknown",
-        "model_latency_ms": None,
-        "model_error": None,
-    }
+    names = protocol_names_to_probe(supports_openai, supports_anthropic, mode="monitor")
+    protocols = _run_probes(base, api_key, timeout, check_path, names)
+    # When capabilities are already known, preserve supports_* even if this tick fails
+    # so we do not fall back into full-protocol rediscovery (policy A).
+    preserve = bool(supports_openai or supports_anthropic)
+    result = _result_from_protocols(
+        protocols,
+        supports_openai=supports_openai,
+        supports_anthropic=supports_anthropic,
+        probed_names=names,
+        preserve_supports=preserve,
+    )
     if check_model:
         result.update(
             model_check(

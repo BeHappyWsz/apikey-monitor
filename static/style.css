@@ -523,29 +523,14 @@ table.cand { min-width:650px; }
   margin-top: 2px;
   flex: 0 0 auto;
 }
-.drag-handle {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel2);
-  color: var(--muted);
-  cursor: grab;
-  line-height: 1;
-}
-.drag-handle:hover {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-.drag-handle:disabled {
-  opacity: .35;
-  cursor: not-allowed;
-}
 .key-card[draggable="true"] {
-  cursor: default;
+  cursor: grab;
+}
+.key-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+.key-card[draggable="true"] :is(button, input, a, label, summary, select, textarea) {
+  cursor: pointer;
 }
 .key-card.dragging {
   opacity: .58;
@@ -911,14 +896,6 @@ table.cand { min-width:650px; }
   justify-content: space-between;
 }
 #task-foot .btn { flex: 1; }
-
-/* Card quick-export chips stay compact */
-.card-actions .js-copy-codex,
-.card-actions .js-copy-claude {
-  padding-inline: 10px;
-  font-weight: 600;
-  letter-spacing: .01em;
-}
 
 .list-wrap { position: relative; z-index: 1; }
 .hero-panel { position: relative; z-index: 1; }

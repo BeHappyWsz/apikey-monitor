@@ -20,6 +20,8 @@
 - 文档收口：明确本机单用户定位；**不做** Web 访问密码 / 公网鉴权；路线图去掉误导项
 - README / 设计文档 / 启动路径与 CHANGELOG 同步
 - `config.json` 作为运行时设置的原子写入目标（页面改设置后落盘）
+- 定时监测（`health_check`）仅探测已成功协议；首次/均未成功时全量；失败不兜底其它协议，保留 `supports_*`（手动检测仍全量 `classify`）
+- 启动前单实例收敛：`.runtime/server.pid`；重复启动先停旧实例再 bind
 
 ### Fixed
 
@@ -43,7 +45,7 @@
 - 批量任务进度展示
 - 配置导出：Claude Code、Codex CLI、`.env`、PowerShell、JSON；支持批量 JSON 与下载
 - 列表刷新间隔可配置（监测设置，`0` 关闭主动轮询）
-- 体验优化：工具栏「更多」、无选中禁用批量、`Ctrl+Enter` 保存、批量检测汇总与问题项筛选、卡片一键 Codex/Claude
+- 体验优化：工具栏「更多」、无选中禁用批量、`Ctrl+Enter` 保存、批量检测汇总与问题项筛选
 - 列表卡片一键复制完整 API Key（`/api/keys/{id}/secret`）；列表接口脱敏
 - JSON 备份 / 恢复：备份全部、导入识别同格式 JSON
 - 空状态首次引导与导入示例

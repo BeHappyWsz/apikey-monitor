@@ -35,15 +35,6 @@ export function initExportUi({ api, state, openModal }) {
     if (btn) btn.setAttribute("aria-expanded", next ? "true" : "false");
   }
 
-  async function quickCopyExport(id, fmt, label) {
-    try {
-      const result = await api("GET", `/api/keys/${id}/export?fmt=${fmt}`);
-      if (!result?.text) return toast("导出内容为空");
-      saveExportFmt(fmt);
-      await copyText(result.text, label);
-    } catch { /* toasted by api */ }
-  }
-
   async function exportSelected() {
     if (!state.selected.size) return toast("请先选择要导出的项目");
     state.exportMode = "batch";
@@ -124,7 +115,6 @@ export function initExportUi({ api, state, openModal }) {
   return {
     closeMoreMenu,
     toggleMoreMenu,
-    quickCopyExport,
     exportSelected,
     updateExport,
     openSingleExport,

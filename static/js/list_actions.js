@@ -61,8 +61,6 @@ export function initListActions({
         return copyText(secret.api_key, "API Key");
       } catch { return; }
     }
-    if (event.target.closest(".js-copy-codex")) return exportUi.quickCopyExport(id, "codex", "Codex 配置");
-    if (event.target.closest(".js-copy-claude")) return exportUi.quickCopyExport(id, "claude", "Claude 配置");
     if (event.target.closest(".js-edit")) return editor.openEdit(key);
     if (event.target.closest(".js-models")) return openModels(key);
     if (event.target.closest(".js-export")) return exportUi.openSingleExport(key);
@@ -85,6 +83,10 @@ export function initListActions({
 
   $("#key-list").addEventListener("dragstart", (event) => {
     if (!canReorder(state.status, state.query)) return event.preventDefault();
+    // Whole-card drag: do not start reorder from interactive controls.
+    if (event.target.closest("button, input, a, select, textarea, label, summary, .url-copy")) {
+      return event.preventDefault();
+    }
     const cardEl = event.target.closest(".key-card");
     if (!cardEl) return;
     state.draggingId = Number(cardEl.dataset.id);
