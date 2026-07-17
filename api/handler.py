@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import json
 import mimetypes
 import os
@@ -13,6 +13,10 @@ from version import USER_AGENT
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
+# Client closed the socket while we were writing a response.
+# On Windows this commonly surfaces as ConnectionAbortedError (WinError 10053).
+_CLIENT_DISCONNECT = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = USER_AGENT
@@ -22,13 +26,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self, value, status=200):
         raw = json.dumps(value, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Cache-Control", "no-store")
-        self._security_headers()
-        self.end_headers()
-        self.wfile.write(raw)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Cache-Control", "no-store")
+            self._security_headers()
+            self.end_headers()
+            self.wfile.write(raw)
+        except _CLIENT_DISCONNECT:
+            # Client already gone; nothing useful left to report.
+            pass
 
     def _error(self, status, code, message, request_id):
         self._json({"error": code, "message": message, "request_id": request_id}, status)
@@ -51,9 +59,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(payload, status)
         except ApiError as exc:
             self._error(exc.status, exc.code, exc.message, request_id)
-        except (BrokenPipeError, ConnectionResetError):
+        except _CLIENT_DISCONNECT:
             pass
         except Exception as exc:
+            # Still answer with 500 when possible; disconnect during that write is ignored in _json.
             self._error(500, "internal_error", str(exc)[:200] or "服务器内部错误", request_id)
 
     def do_GET(self):
@@ -75,12 +84,16 @@ class Handler(BaseHTTPRequestHandler):
         if not os.path.isfile(path): self.send_error(404); return
         with open(path, "rb") as stream: raw = stream.read()
         content_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
-        self.send_response(200)
-        self.send_header("Content-Type", content_type + ("; charset=utf-8" if content_type.startswith("text/") or content_type.endswith("javascript") else ""))
-        self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Cache-Control", "no-cache")
-        self._security_headers()
-        self.end_headers(); self.wfile.write(raw)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type + ("; charset=utf-8" if content_type.startswith("text/") or content_type.endswith("javascript") else ""))
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Cache-Control", "no-cache")
+            self._security_headers()
+            self.end_headers()
+            self.wfile.write(raw)
+        except _CLIENT_DISCONNECT:
+            pass
 
     def _security_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
