@@ -3,7 +3,6 @@
 import json
 import os
 import sqlite3
-import tempfile
 import time
 from contextlib import contextmanager
 
@@ -54,8 +53,13 @@ def get_list_revision():
 
 
 def _load_defaults():
+    """Read-only seed: tracked config.json if present, else hardcoded defaults.
+
+    config.json is a shipped seed only — the runtime never writes it. init_db()
+    seeds the settings table from here once on a fresh database; afterwards the
+    table is the single source of truth and config.json is never rewritten.
+    """
     if not os.path.isfile(CONFIG_PATH):
-        write_config_atomic(_FALLBACK_DEFAULTS)
         return dict(_FALLBACK_DEFAULTS)
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as stream:
@@ -66,23 +70,6 @@ def _load_defaults():
     if isinstance(data, dict):
         out.update({key: str(value) for key, value in data.items() if not key.startswith("_")})
     return out
-
-
-def write_config_atomic(data):
-    payload = {"_comment": "apiKeyConfig runtime settings. The web UI updates this file atomically."}
-    payload.update({key: str(value) for key, value in data.items() if not str(key).startswith("_")})
-    directory = os.path.dirname(CONFIG_PATH) or "."
-    fd, temp_path = tempfile.mkstemp(prefix="config-", suffix=".json.tmp", dir=directory, text=True)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(payload, stream, ensure_ascii=False, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temp_path, CONFIG_PATH)
-    finally:
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
 
 
 def get_conn():
@@ -116,9 +103,8 @@ def _migrate(conn):
         if col not in cols:
             conn.execute(f"ALTER TABLE keys ADD COLUMN {col} {decl}")
     conn.execute("PRAGMA user_version=3")
-    # webdav_last_sync was renamed to "_webdav_last_sync" so the runtime token
-    # stays out of config.json. Drop legacy unprefixed rows or full-table dumps
-    # (write_config_atomic keeps every non-"_" settings key) would carry it back.
+    # webdav_last_sync was renamed to "_webdav_last_sync" (runtime state) so it
+    # stays out of the /api/settings surface. Drop legacy unprefixed rows.
     conn.execute("DELETE FROM settings WHERE k = 'webdav_last_sync'")
 
 
@@ -139,8 +125,12 @@ def init_db():
         CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT);
         """)
         _migrate(conn)
-        for key, value in _load_defaults().items():
-            conn.execute("INSERT OR IGNORE INTO settings(k,v) VALUES(?,?)", (key, value))
+        # Seed the settings table only on first run (empty table). config.json
+        # is a read-only seed; afterwards the table is the single source of
+        # truth and config.json is never rewritten by the runtime.
+        if conn.execute("SELECT 1 FROM settings LIMIT 1").fetchone() is None:
+            for key, value in _load_defaults().items():
+                conn.execute("INSERT INTO settings(k,v) VALUES(?,?)", (key, value))
 
 
 def get_all_settings():
@@ -148,21 +138,20 @@ def get_all_settings():
         return {row["k"]: row["v"] for row in conn.execute("SELECT k,v FROM settings")}
 
 
-def set_settings(items, persist=True):
+def set_settings(items):
+    """Upsert settings rows. Runtime writes stay in the DB only — config.json
+    is a read-only seed and is never rewritten."""
     normalized = {key: str(value) for key, value in items.items()}
     with connection(write=True) as conn:
         for key, value in normalized.items():
             conn.execute("INSERT INTO settings(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (key, value))
-    if persist:
-        merged = get_all_settings()
-        write_config_atomic(merged)
 
 
 def replace_settings(items):
+    """Replace the whole settings table (used by restart orchestration)."""
     with connection(write=True) as conn:
         conn.execute("DELETE FROM settings")
         conn.executemany("INSERT INTO settings(k,v) VALUES(?,?)", [(key, str(value)) for key, value in items.items()])
-    write_config_atomic(items)
 
 
 def _row_to_dict(row):

@@ -5,8 +5,8 @@ Build/push/pull a JSON envelope (see ``core.export``) against a WebDAV server
 such as 坚果云. All operations are user-triggered; nothing syncs silently.
 
 Credentials live in the settings table. The password uses a ``_`` prefix so
-``SettingsService.get()`` and ``config.json`` never expose it; sync reads it
-back from the DB directly.
+``SettingsService.get()`` never exposes it; sync reads it back from the DB
+directly.
 """
 import os
 import time
@@ -24,9 +24,8 @@ _WD_SERVER = "webdav_server"
 _WD_USERNAME = "webdav_username"
 _WD_REMOTE = "webdav_remote_path"
 _WD_PASSWORD = "_webdav_password"  # "_" prefix: excluded from config.json + masked API
-# Last-sync is runtime state (rewritten every sync). The "_" prefix keeps it in
-# the DB only — out of the tracked config.json snapshot and the /api/settings
-# surface — while /api/sync/status still reads it back via get_all_settings().
+# Last-sync is runtime state. The "_" prefix keeps it out of the /api/settings
+# surface; /api/sync/status reads it back via get_all_settings().
 _WD_LAST = "_webdav_last_sync"
 
 _SYNC_TIMEOUT = 30
@@ -108,8 +107,7 @@ class SyncService:
         parts = [action, f"count={count}", f"skipped={skipped}", f"ts={int(time.time())}"]
         if remote_modified:
             parts.append(f"remote={remote_modified}")
-        # persist=False: runtime state must not trigger a config.json rewrite.
-        db.set_settings({_WD_LAST: "|".join(parts)}, persist=False)
+        db.set_settings({_WD_LAST: "|".join(parts)})
 
     def _snapshot_local(self):
         """Best-effort local JSON snapshot before a destructive replace."""

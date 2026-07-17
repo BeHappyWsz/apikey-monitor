@@ -7,8 +7,8 @@ from services import restart_service
 
 class SettingsService:
     def get(self):
-        # Drop "_"-prefixed secrets (e.g. WebDAV password) so they never reach
-        # the settings API surface. config.json already excludes them on write.
+        # Drop "_"-prefixed secrets/state (e.g. _webdav_password, _webdav_last_sync)
+        # so they never reach the settings API surface.
         return {k: v for k, v in db.get_all_settings().items() if not k.startswith("_")}
 
     def validate(self, payload):

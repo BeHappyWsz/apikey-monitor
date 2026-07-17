@@ -289,15 +289,13 @@ class SyncServiceTests(_DBPatchedCase):
         self.svc().upload()  # records via _record
         self.assertTrue(self.svc().status()["last_sync"].startswith("upload|"))
 
-    def test_last_sync_not_persisted_to_config_json(self):
-        # Runtime state must stay in the DB only: queryable via status(), but
-        # never mirrored into the tracked config.json snapshot. Calls _record
-        # directly so the assertion does not depend on the optional HTTP stub.
+    def test_last_sync_stays_in_db_only(self):
+        # Runtime state lives in the settings table; config.json is a read-only
+        # seed the runtime never rewrites. Calls _record directly to avoid the
+        # optional HTTP stub.
         self.svc()._record("upload", 3, None)
         self.assertTrue(self.svc().status()["last_sync"].startswith("upload|"))
-        with open(db.CONFIG_PATH, encoding="utf-8") as handle:
-            text = handle.read()
-        self.assertNotIn("webdav_last_sync", text)
+        self.assertFalse(os.path.exists(db.CONFIG_PATH))
 
 
 # ---------------------------------------------------------------------------
