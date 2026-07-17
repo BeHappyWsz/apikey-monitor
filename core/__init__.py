@@ -7,9 +7,13 @@ submodules; extension points are the registries in `core.protocols`,
 """
 from core.export import (
     EXPORT_FORMATS,
+    SCHEMA_VERSION,
+    build_sync_payload,
+    dumps_sync_payload,
     export_batch,
     export_config,
     list_export_formats,
+    parse_sync_payload,
 )
 from core.http import MAX_RESPONSE_BYTES, _read_limited, _request
 from core.parse import IMPORTERS, parse_import_text, parse_paste
@@ -41,6 +45,10 @@ __all__ = [
     "model_check",
     "export_config",
     "export_batch",
+    "build_sync_payload",
+    "dumps_sync_payload",
+    "parse_sync_payload",
+    "SCHEMA_VERSION",
     "list_export_formats",
     "list_protocol_names",
     "get_protocol",

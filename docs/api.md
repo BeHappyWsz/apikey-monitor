@@ -171,10 +171,9 @@ Content-Type: application/json
 
 ## 配置导出
 
-```http
 ### 获取完整 API Key（按需）
 
-```
+```http
 GET /api/keys/{id}/secret
 ```
 
@@ -188,8 +187,14 @@ GET /api/keys/{id}/secret
 }
 ```
 
+### 单条导出
+
+```http
 GET /api/keys/{id}/export?fmt=claude
 GET /api/keys/{id}/export?fmt=codex
+GET /api/keys/{id}/export?fmt=env
+GET /api/keys/{id}/export?fmt=powershell
+GET /api/keys/{id}/export?fmt=json
 ```
 
 返回：
@@ -199,6 +204,8 @@ GET /api/keys/{id}/export?fmt=codex
   "text": "export OPENAI_BASE_URL=..."
 }
 ```
+
+单条导出 `fmt` 支持：`claude`、`codex`、`env`、`powershell`、`json`。
 
 ### 批量导出 JSON
 
@@ -224,7 +231,118 @@ Content-Type: application/json
 }
 ```
 
-单条导出 `fmt` 支持：`claude`、`codex`、`env`、`powershell`、`json`。
+## WebDAV 同步
+
+WebDAV 同步是可选能力。服务器会把当前 Key 列表打包为 JSON 同步载荷后上传到远程文件；下载时可选择合并或全量替换。`password` 仅在保存时提交，查询配置不会返回明文密码。
+
+### 获取同步配置
+
+```http
+GET /api/sync/config
+```
+
+响应示例：
+
+```json
+{
+  "configured": true,
+  "server": "https://dav.jianguoyun.com/dav/",
+  "username": "me@example.com",
+  "remote_path": "apikey-monitor/backup.json",
+  "has_password": true
+}
+```
+
+### 保存同步配置
+
+```http
+POST /api/sync/config
+Content-Type: application/json
+```
+
+```json
+{
+  "server": "https://dav.jianguoyun.com/dav/",
+  "username": "me@example.com",
+  "password": "应用密码",
+  "remote_path": "apikey-monitor"
+}
+```
+
+`remote_path` 可填写目录或 JSON 文件。目录会自动保存为该目录下的 `backup.json`，例如 `apikey-monitor` 会规范化为 `apikey-monitor/backup.json`。再次保存时 `password` 传空字符串表示保留原密码。
+
+### 测试连接
+
+```http
+POST /api/sync/test
+```
+
+响应示例：
+
+```json
+{
+  "ok": true,
+  "exists": false,
+  "last_modified": null
+}
+```
+
+### 上传到 WebDAV
+
+```http
+POST /api/sync/upload
+```
+
+响应示例：
+
+```json
+{
+  "count": 3,
+  "remote_modified": "Wed, 17 Jul 2026 10:00:00 GMT"
+}
+```
+
+### 从 WebDAV 下载
+
+```http
+POST /api/sync/download
+Content-Type: application/json
+```
+
+```json
+{
+  "mode": "merge"
+}
+```
+
+`mode` 支持：
+
+- `merge`：合并导入，跳过重复项。
+- `replace`：全量替换本机 Key，替换前会尽量写入本地 JSON 快照。
+
+响应示例：
+
+```json
+{
+  "count": 2,
+  "skipped_duplicate": 1,
+  "mode": "merge",
+  "backup_path": null,
+  "remote_modified": "Wed, 17 Jul 2026 10:00:00 GMT"
+}
+```
+
+### 获取同步状态
+
+```http
+GET /api/sync/status
+```
+
+```json
+{
+  "last_sync": "upload|count=3|skipped=0|ts=1784282400"
+}
+```
 
 ## 设置
 

@@ -6,6 +6,7 @@ import { initImport } from "./js/import.js";
 import { initAdd } from "./js/add.js";
 import { initEditor } from "./js/editor.js";
 import { initSettings } from "./js/settings.js";
+import { initSync } from "./js/sync.js";
 import { createListUi } from "./js/list_ui.js";
 import { initExportUi } from "./js/export_ui.js";
 import { initListActions } from "./js/list_actions.js";
@@ -103,6 +104,7 @@ initDialogs();
 initImport({ api, state, load, openModal, closeModal, startTask: taskController.startTask });
 initAdd({ api, load, openModal, closeModal });
 initSettings({ api, state, openModal, closeModal, waitForHealth, onSettingsApplied: applyUiRefreshFromSettings });
+initSync({ api, load, openModal });
 const exportUi = initExportUi({ api, state, openModal });
 initListActions({
   api,

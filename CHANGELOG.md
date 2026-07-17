@@ -4,12 +4,23 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-17
+
+相对 [0.1.1] 的 WebDAV 云同步发布版本。
+
+### Added
+
+- **可选 WebDAV 云同步**（坚果云等，对标 cc-switch）：设置页配置 server / 用户名 / 应用密码 / 远程路径；支持测试连接、上传、**下载合并**与**下载替换**（替换前自动本地备份一份）；**零第三方依赖**（`urllib` + Basic Auth + HTTPS）
+- 同步载荷为可移植 JSON 信封 `{app, schema, exported_at, keys:[...]}`，复用备份字段（`name` / `base_url` / `api_key` / `check_model` / `check_path`）；下载兼容信封 / 裸数组 / 单对象三种形态
+- WebDAV 凭据安全：应用密码以 `_webdav_password` 存于 DB，**不写入 `config.json`、不在设置接口明文返回**；远端错误信息对凭据脱敏
+- 新增模块：`core/webdav.py`（纯 WebDAV 客户端）、`services/sync_service.py`（同步编排）、前端 `static/js/sync.js`
+
 ### Planned（可选增强，非承诺）
 
 - 可选密钥落盘加密（仍依赖本机目录权限；非必做）
 - 监测历史 / 告警等体验增强（按需）
 - 第三协议端到端（如 Gemini）：待产品选型后再开任务
-- **多机数据共享 / 坚果云 WebDAV 同步**（对标 cc-switch 式上传下载；任务 `07-17-multi-device-webdav-sync`，已 park，分期：文档约定 → WebDAV MVP → 可选加密与提示）
+- WebDAV 体验增强：启动提示「云端有更新」、变更后提示上传、`MKCOL` 自动建目录、上传前「先拉再合再推」、端到端加密同步包（任务 `07-17-multi-device-webdav-sync`，Phase 1 已落地）
 - 中期效率：thin list payload、按 id 局部 DOM 补丁、SQL 侧 due 过滤、问题状态再检策略、SSE 推送（见 `docs/design.md`）
 
 ## [0.1.1] - 2026-07-17
@@ -73,6 +84,7 @@
 - JSON 导出字段精简为可移植配置：`name`、`base_url`、`api_key`、`check_model`
 - 导出弹窗布局优化
 
-[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.2
 [0.1.1]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.1
 [0.1.0]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.0

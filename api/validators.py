@@ -6,6 +6,7 @@ MAX_JSON_BODY = 256 * 1024
 MAX_IMPORT_BODY = 2 * 1024 * 1024
 MAX_BATCH_ITEMS = 1000
 MAX_IDS = 1000
+DEFAULT_WEBDAV_FILE = "backup.json"
 
 
 def normalize_int(value, default=None, min_value=None, max_value=None):
@@ -101,3 +102,31 @@ def ids_payload(data):
         if number > 0 and number not in out:
             out.append(number)
     return out
+
+
+def normalize_webdav_remote_path(value):
+    remote_path = str(value or "").strip()
+    if not remote_path:
+        raise ValueError("远程路径不能为空")
+    if remote_path.lower().endswith(".json"):
+        return remote_path
+    return remote_path.rstrip("/\\") + "/" + DEFAULT_WEBDAV_FILE
+
+
+def webdav_config_payload(data, current=None):
+    """Validate WebDAV sync settings. Empty password means "keep existing"."""
+    if not isinstance(data, dict):
+        raise ValueError("json object required")
+    current = current or {}
+    server = str(data.get("server", current.get("server", ""))).strip()
+    low = server.lower()
+    if not server:
+        raise ValueError("WebDAV 服务器地址不能为空")
+    if not (low.startswith("https://") or low.startswith("http://")):
+        raise ValueError("WebDAV 服务器地址需以 http(s):// 开头")
+    username = str(data.get("username", current.get("username", ""))).strip()
+    if not username:
+        raise ValueError("WebDAV 用户名不能为空")
+    remote_path = normalize_webdav_remote_path(data.get("remote_path", current.get("remote_path", "")))
+    password = str(data.get("password") or "")  # "" => caller keeps existing
+    return {"server": server, "username": username, "remote_path": remote_path, "password": password}

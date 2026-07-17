@@ -9,7 +9,9 @@ from api import validators
 from services.key_service import KEYS
 from services.task_service import TASKS
 from services.settings_service import SETTINGS
+from services.sync_service import SYNC
 from services import restart_service
+from core.webdav import WebDAVError
 
 _KEY_RE = re.compile(r"^/api/keys/(\d+)$")
 _KEY_ACTION_RE = re.compile(r"^/api/keys/(\d+)/(check|check_model|export|secret)$")
@@ -25,6 +27,21 @@ class ApiError(Exception):
 
 def _id(match):
     return int(match.group(1))
+
+
+def _sync_code(code):
+    return {"config_error": "sync_not_configured", "auth_error": "webdav_auth_failed"}.get(code, "webdav_error")
+
+
+def _sync_call(fn, *args):
+    """Run a sync operation, mapping WebDAVError to a JSON error response."""
+    try:
+        return 200, fn(*args)
+    except WebDAVError as exc:
+        status = 400 if exc.code in ("config_error", "auth_error") else 502
+        raise ApiError(status, _sync_code(exc.code), str(exc))
+    except ValueError as exc:
+        raise ApiError(400, "invalid_sync", str(exc))
 
 
 def route(method, path, query, body, server):
@@ -44,6 +61,10 @@ def route(method, path, query, body, server):
         return 200, {"revision": db.get_list_revision()}
     if method == "GET" and path == "/api/settings":
         return 200, SETTINGS.get()
+    if method == "GET" and path == "/api/sync/config":
+        return 200, SYNC.get_config()
+    if method == "GET" and path == "/api/sync/status":
+        return 200, SYNC.status()
     match = _TASK_RE.fullmatch(path)
     if method == "GET" and match:
         task = TASKS.get(match.group(1))
@@ -131,6 +152,16 @@ def route(method, path, query, body, server):
         except ValueError as exc: raise ApiError(400, "invalid_settings", str(exc))
         db.set_settings(payload)
         return 200, SETTINGS.get()
+    if method == "POST" and path == "/api/sync/config":
+        try: return 200, SYNC.save_config(body)
+        except ValueError as exc: raise ApiError(400, "invalid_sync_config", str(exc))
+    if method == "POST" and path == "/api/sync/test":
+        return _sync_call(SYNC.test)
+    if method == "POST" and path == "/api/sync/upload":
+        return _sync_call(SYNC.upload)
+    if method == "POST" and path == "/api/sync/download":
+        mode = (body or {}).get("mode", "merge") if isinstance(body, dict) else "merge"
+        return _sync_call(SYNC.download, mode)
     if method == "POST" and path == "/api/system/restart":
         try: status = SETTINGS.restart(server)
         except ValueError as exc: raise ApiError(409, "target_unavailable", str(exc))

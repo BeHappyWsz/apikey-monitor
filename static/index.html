@@ -18,6 +18,7 @@
   <div class="top-actions">
     <button class="btn ghost" id="btn-system-settings">⚙ 系统设置</button>
     <button class="btn ghost" id="btn-monitor-settings">◌ 监测设置</button>
+    <button class="btn ghost" id="btn-sync">☁ 云同步</button>
   </div>
 </header>
 
@@ -318,6 +319,42 @@
     </div>
     <p class="hint export-meta" id="exp-meta"></p>
     <textarea id="exp-text" rows="8" readonly></textarea>
+  </div>
+</div>
+
+<!-- 云同步弹窗 -->
+<div class="modal" role="dialog" aria-modal="true" id="modal-sync">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>云同步（WebDAV）</h2>
+      <button class="x" data-close>✕</button>
+    </div>
+    <div class="form">
+      <div class="form-section">
+        <div class="section-title"><span class="section-mark">DAV</span>WebDAV 设置</div>
+        <label><span>服务器</span><input type="url" id="sync-server" placeholder="https://dav.jianguoyun.com/dav/"></label>
+        <label><span>用户名</span><input type="text" id="sync-username" placeholder="登录邮箱"></label>
+        <label><span>密码（应用密码）</span>
+          <div class="input-line">
+            <input type="password" id="sync-password" autocomplete="off" placeholder="应用密码（留空保持不变）">
+          </div>
+        </label>
+        <label><span>远程路径</span><input type="text" id="sync-remote" placeholder="/apikey-monitor/backup.json"></label>
+        <div class="setting-note danger-note" id="sync-warn-http" hidden>当前为 HTTP，凭据与密钥将明文传输，建议改用 HTTPS。</div>
+        <div class="setting-note">同步内容为可移植 JSON（名称 / Base URL / Key / 检测模型 / 检测路径）。端口等本机设置不参与同步。同一云端文件同时只允许一台设备写入。</div>
+      </div>
+      <div class="sync-actions">
+        <button class="btn soft" id="btn-sync-test" type="button">测试连接</button>
+        <button class="btn" id="btn-sync-save" type="button">保存设置</button>
+        <button class="btn" id="btn-sync-upload" type="button">⇫ 上传到云端</button>
+        <button class="btn" id="btn-sync-download-merge" type="button">⇩ 下载合并</button>
+        <button class="btn danger" id="btn-sync-download-replace" type="button">⇩ 下载替换</button>
+      </div>
+      <p class="hint" id="sync-status">未同步。</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost pill" data-close>关闭</button>
+    </div>
   </div>
 </div>
 

@@ -20,6 +20,7 @@
 - **体验优化**：工具栏「更多」菜单、无选中禁用批量操作、`Ctrl+Enter` 快捷保存、批量检测汇总与问题项筛选
 - **列表脱敏**：列表/详情不返回明文 Key；卡片可一键复制完整 Key（按需取 secret）
 - **JSON 备份/恢复**：备份全部为 JSON；粘贴导入可直接识别同格式 JSON
+- **可选云同步（WebDAV）**：对接坚果云等 WebDAV，显式上传 / 下载合并 / 下载替换（替换前自动本地备份）；零第三方依赖
 - **安全换端口**：先释放旧端口再启新端口，失败自动回滚
 - **跨平台启动**：Windows `start.vbs`；macOS/Linux `start.sh`（可选后台）
 
@@ -129,13 +130,14 @@ https://api.example.com sk-xxxx
 
 | 路径 | 说明 |
 |------|------|
-| `data.db` | SQLite，**首次启动自动创建，勿提交到 Git** |
+| `data.db` | SQLite，**首次启动自动创建，勿提交到 Git**（含 WebDAV 应用密码） |
 | `config.json` | 运行时设置（无密钥）；页面保存设置后与 DB 同步并**原子写入**本文件 |
+| `.runtime/` | 单实例 pid / 重启状态；`backups/` 存放云同步「替换前」本地快照（`APIKEYCONFIG_RUNTIME_DIR` 覆盖） |
 | `app.py` | 入口与 HTTP 生命周期 |
-| `core/` | 解析、探活、导出（包结构 + 扩展注册表；`import core` 仍可用） |
+| `core/` | 解析、探活、导出、WebDAV 客户端（包结构 + 扩展注册表；`import core` 仍可用） |
 | `db.py` | SQLite / 配置 |
 | `api/` | 路由与校验 |
-| `services/` | Key / 任务 / 设置 / 重启 |
+| `services/` | Key / 任务 / 设置 / 重启 / 云同步 |
 | `monitor.py` | 定时调度 |
 | `static/` | 前端（原生 HTML/CSS/ESM；`app.js` + `js/*` 模块） |
 | `docs/` | API / 设计说明 |
@@ -159,6 +161,28 @@ https://api.example.com sk-xxxx
 2. 新环境打开 **「粘贴导入」** 或空状态 **「从 JSON 恢复」**，粘贴备份 → 解析预览 → 入库。
 3. 也可导出选中项为 JSON，再同样方式导入。
 
+## 云同步（WebDAV / 坚果云）
+
+页头「☁ 云同步」可把**可移植 JSON**（名称 / Base URL / Key / 检测模型 / 检测路径）显式上传到 WebDAV，或在另一台机器下载合并 / 替换。端口等本机设置不参与同步。所有操作均为手动触发，**不会静默双向同步**。
+
+**坚果云配置示例：**
+
+| 项 | 值 |
+|----|-----|
+| 服务器 | `https://dav.jianguoyun.com/dav/` |
+| 用户名 | 登录邮箱 |
+| 密码 | 账号设置中的 **应用密码**（非登录密码） |
+| 远程路径 | `/apikey-monitor/backup.json` |
+
+**操作：**
+
+- **测试连接**：探测远程文件是否存在及更新时间（PROPFIND，失败回退 HEAD）。
+- **上传到云端**：以本机当前库生成 JSON 信封覆盖远程同路径文件。
+- **下载合并**：按 `base_url + api_key` 去重，跳过已存在的条目（非破坏）。
+- **下载替换**：以云端为准覆盖本机（**替换前自动在 `.runtime/backups/` 存一份本地备份**，需二次确认）。
+
+> 安全提示：共享坚果云账号即共享全部 Key；建议使用可吊销的**应用密码**；优先 HTTPS。下载的条目初始为「未知」状态，定时监测会在下个周期自动检测。同一云端文件同时只允许一台设备写入。
+
 ## 开发与测试
 
 ```bash
@@ -172,6 +196,7 @@ node --check static/js/list_ui.js
 node --check static/js/export_ui.js
 node --check static/js/editor.js
 node --check static/js/state.js
+node --check static/js/sync.js
 
 # 可选 state 单测
 node --test tests/state.test.mjs

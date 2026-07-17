@@ -3,7 +3,7 @@
   "name": "multi-device-webdav-sync",
   "title": "多机数据共享与坚果云 WebDAV 同步",
   "description": "Multi-device data sharing via JSON backup and optional Nutstore WebDAV upload/download (parked backlog)",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -30,10 +30,10 @@
     "services/",
     "core/"
   ],
-  "notes": "PARKED backlog. Do not start until user unparks. PRD filled 2026-07-17 with Phase 0/1/2 plan (docs + WebDAV MVP + optional encrypt).",
+  "notes": "Phase 1 (MVP) implemented 2026-07-17: core/webdav.py (zero-dep WebDAV client), sync payload build/parse in core/export.py, services/sync_service.py (config masked, test/upload/download merge|replace + auto local backup), /api/sync/* routes + WebDAVError mapping, static/js/sync.js cloud-sync modal, docs (design/CHANGELOG/README). Verification 2026-07-17: tests/test_webdav.py (17 cases, pure client + payload codec) and tests/test_sync_service.py (21 cases: SyncService orchestration — config/save/mask/empty-pw-keep, test/upload/envelope, download merge+dedup/replace+snapshot/invalid-mode, status; plus /api/sync/* routes incl. WebDAVError->ApiError mapping config/auth->400, connection->502, invalid mode/config->400). Full suite 84 green; JS checks + state.test.mjs pass. No encryption (Phase 2 optional).",
   "meta": {
-    "parked": true,
-    "parked_reason": "User asked to record as future todo; no implementation now.",
+    "parked": false,
+    "parked_reason": "Unparked 2026-07-17; Phase 1 MVP implemented.",
     "phases": [
       "docs-multi-device",
       "webdav-mvp",
