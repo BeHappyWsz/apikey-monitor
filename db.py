@@ -116,6 +116,10 @@ def _migrate(conn):
         if col not in cols:
             conn.execute(f"ALTER TABLE keys ADD COLUMN {col} {decl}")
     conn.execute("PRAGMA user_version=3")
+    # webdav_last_sync was renamed to "_webdav_last_sync" so the runtime token
+    # stays out of config.json. Drop legacy unprefixed rows or full-table dumps
+    # (write_config_atomic keeps every non-"_" settings key) would carry it back.
+    conn.execute("DELETE FROM settings WHERE k = 'webdav_last_sync'")
 
 
 def init_db():
