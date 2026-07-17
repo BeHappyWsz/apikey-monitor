@@ -1,4 +1,5 @@
 import test from "node:test";
+import { renderCard } from "../static/js/cards.js";
 import assert from "node:assert/strict";
 import { getVisibleKeys, selectCurrentResults, selectionSummary, taskProgress, restartCandidates, isLatestResponse, moveKey, canReorder, keysFingerprint } from "../static/js/state.js";
 const keys=[{id:1,status:"up",name:"Alpha",models:["gpt-4"]},{id:2,status:"down",name:"Beta",models:[]}];
@@ -26,3 +27,15 @@ test("fingerprint changes with model_last_error",()=>{
 const problemKeys=[{id:1,status:"up",name:"U"},{id:2,status:"down",name:"D"},{id:3,status:"auth_error",name:"A"},{id:4,status:"unknown",name:"N"},{id:5,status:"rate_limited",name:"R"}];
 test("problem filtering",()=>assert.deepEqual(getVisibleKeys(problemKeys,"problem","").map(k=>k.id),[2,3,4,5]));
 
+const cardState={checking:new Set(),selected:new Set(),status:"all",query:""};
+test("card shows every successful protocol",()=>{
+  const html=renderCard({id:1,status:"up",name:"Both",base_url:"https://example.com",supports_openai:true,supports_anthropic:true},cardState);
+  assert.match(html,/<em>OpenAI<\/em>/);
+  assert.match(html,/<em>Anthropic<\/em>/);
+});
+test("card hides stale protocol flags after failure",()=>{
+  const html=renderCard({id:1,status:"down",name:"Failed",base_url:"https://example.com",supports_openai:true,supports_anthropic:true},cardState);
+  assert.match(html,/未确认/);
+  assert.doesNotMatch(html,/<em>OpenAI<\/em>/);
+  assert.doesNotMatch(html,/<em>Anthropic<\/em>/);
+});

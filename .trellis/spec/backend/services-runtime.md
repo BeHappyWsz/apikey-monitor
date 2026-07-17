@@ -23,7 +23,7 @@ HTTP must not reimplement lease/check logic; call these services from `api/route
 | Call | Probe function | Typical use |
 |------|----------------|-------------|
 | `KEYS.check(id)` | `core.classify` | Full protocol discovery after add/edit/manual check |
-| `KEYS.check(id, health=True)` | `core.health_check` | Monitor path (uses stored protocol flags) |
+| `KEYS.check(id, health=True)` | `core.health_check` | Monitor path; probes all protocols and refreshes capability flags |
 | `KEYS.check_model(id, model)` | `core.model_check` | Optional model probe; may update `check_model` |
 | `KEYS.batch_check(ids, health=?)` | wraps unleased worker | Returns a **task** object (HTTP 202) |
 

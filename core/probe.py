@@ -18,10 +18,10 @@ def _aggregate(protocols):
     return status, latency, "; ".join(errors)[:300]
 
 
-def _empty_result(error, supports_openai=False, supports_anthropic=False):
+def _empty_result(error):
     return {
-        "supports_openai": supports_openai,
-        "supports_anthropic": supports_anthropic,
+        "supports_openai": False,
+        "supports_anthropic": False,
         "models": [],
         "status": "down",
         "latency_ms": None,
@@ -63,26 +63,17 @@ def _run_probes(base, api_key, timeout, check_path, names):
     return protocols
 
 
-def _result_from_protocols(protocols, supports_openai=False, supports_anthropic=False, probed_names=None, preserve_supports=False):
+def _result_from_protocols(protocols):
     status, latency, error = _aggregate(protocols)
     by_name = {p["protocol"]: p for p in protocols}
     openai = by_name.get("openai")
     anth = by_name.get("anthropic")
-    probed = set(probed_names or by_name.keys())
 
-    if preserve_supports:
-        # Monitor path: keep known capability flags; only refresh status/latency/error.
-        supports_openai_out = bool(supports_openai)
-        supports_anthropic_out = bool(supports_anthropic)
-    else:
-        if "openai" in probed:
-            supports_openai_out = bool(openai and openai.get("endpoint_exists"))
-        else:
-            supports_openai_out = bool(supports_openai)
-        if "anthropic" in probed:
-            supports_anthropic_out = bool(anth and anth.get("endpoint_exists"))
-        else:
-            supports_anthropic_out = bool(supports_anthropic)
+    # Confirm a capability only when that protocol succeeds in this run.
+    # Authentication errors and generic gateway responses are not proof that
+    # the requested protocol is actually supported.
+    supports_openai_out = bool(openai and openai.get("status") == "up")
+    supports_anthropic_out = bool(anth and anth.get("status") == "up")
 
     models = openai["models"] if openai else []
     return {
@@ -109,7 +100,7 @@ def classify(base_url, api_key, timeout=15, check_model="", check_path=""):
 
     names = protocol_names_to_probe(mode="discover")
     protocols = _run_probes(base, api_key, timeout, check_path, names)
-    result = _result_from_protocols(protocols, probed_names=names)
+    result = _result_from_protocols(protocols)
     if check_model:
         check = model_check(
             base,
@@ -147,26 +138,20 @@ def model_check(base_url, api_key, model, supports_openai=False, supports_anthro
 
 
 def health_check(base_url, api_key, supports_openai=False, supports_anthropic=False, timeout=15, check_model="", check_path=""):
-    """Lightweight scheduled probe: connectivity only (known protocols).
+    """Scheduled connectivity and capability refresh across all protocols.
 
-    Does **not** run model_check even when check_model is set — model probing is
-    reserved for classify / manual model detection so monitor traffic stays cheap.
-    check_model is accepted for call-site compatibility and ignored.
+    Does **not** run model_check even when check_model is set - model probing is
+    reserved for classify / manual model detection. Every registered protocol is
+    probed so stale capabilities are cleared and newly available ones are found.
+    The stored supports_* arguments remain accepted for call-site compatibility.
     """
     try:
         base = normalize_base_url(base_url)
     except ValueError as exc:
-        return _empty_result(str(exc), supports_openai, supports_anthropic)
+        return _empty_result(str(exc))
+    if not api_key:
+        return _empty_result("missing api_key")
 
-    names = protocol_names_to_probe(supports_openai, supports_anthropic, mode="monitor")
+    names = protocol_names_to_probe(mode="discover")
     protocols = _run_probes(base, api_key, timeout, check_path, names)
-    # When capabilities are already known, preserve supports_* even if this tick fails
-    # so we do not fall back into full-protocol rediscovery (policy A).
-    preserve = bool(supports_openai or supports_anthropic)
-    return _result_from_protocols(
-        protocols,
-        supports_openai=supports_openai,
-        supports_anthropic=supports_anthropic,
-        probed_names=names,
-        preserve_supports=preserve,
-    )
+    return _result_from_protocols(protocols)

@@ -18,12 +18,14 @@ class ProtocolSelectionTests(unittest.TestCase):
         self.assertEqual(core.probe.protocol_names_to_probe(False, False, mode="monitor"), ["openai", "anthropic"])
         self.assertEqual(core.probe.protocol_names_to_probe(mode="discover"), ["openai", "anthropic"])
 
-    def test_health_only_probes_known_openai(self):
+    def test_health_refreshes_all_protocols(self):
         calls = []
 
         def fake_request(method, url, headers, body, timeout):
             calls.append(url)
-            return 200, '{"data":[]}', 1, None
+            if "models" in url:
+                return 200, '{"data":[]}', 1, None
+            return 404, "", 1, "HTTP 404"
 
         with patch("core.http._request", side_effect=fake_request):
             result = core.health_check(
@@ -32,10 +34,10 @@ class ProtocolSelectionTests(unittest.TestCase):
         self.assertEqual(result["status"], "up")
         self.assertTrue(result["supports_openai"])
         self.assertFalse(result["supports_anthropic"])
-        self.assertTrue(calls)
-        self.assertTrue(all("messages" not in url for url in calls))
+        self.assertTrue(any("models" in url for url in calls))
+        self.assertTrue(any("messages" in url for url in calls))
 
-    def test_health_known_fail_does_not_probe_other(self):
+    def test_health_failure_clears_known_capability(self):
         calls = []
 
         def fake_request(method, url, headers, body, timeout):
@@ -47,27 +49,28 @@ class ProtocolSelectionTests(unittest.TestCase):
                 "https://example.com", "sk-test", supports_openai=True, supports_anthropic=False
             )
         self.assertEqual(result["status"], "down")
-        self.assertTrue(all("messages" not in url for url in calls))
-        # Policy A: known supports flags are preserved on monitor failure.
-        self.assertTrue(result["supports_openai"])
+        self.assertFalse(result["supports_openai"])
         self.assertFalse(result["supports_anthropic"])
+        self.assertTrue(any("models" in url for url in calls))
+        self.assertTrue(any("messages" in url for url in calls))
 
-    def test_health_preserves_unprobed_support_flag(self):
-        """When only anthropic is known, openai support flag stays as provided (False)."""
+    def test_health_replaces_stale_openai_with_anthropic(self):
         calls = []
 
         def fake_request(method, url, headers, body, timeout):
             calls.append(url)
+            if "models" in url:
+                return 404, "", 1, "HTTP 404"
             return 200, "{}", 2, None
 
         with patch("core.http._request", side_effect=fake_request):
             result = core.health_check(
-                "https://example.com", "sk-test", supports_openai=False, supports_anthropic=True
+                "https://example.com", "sk-test", supports_openai=True, supports_anthropic=False
             )
         self.assertEqual(result["status"], "up")
-        self.assertTrue(result["supports_anthropic"])
         self.assertFalse(result["supports_openai"])
-        self.assertTrue(all("models" not in url for url in calls))
+        self.assertTrue(result["supports_anthropic"])
+        self.assertTrue(any("models" in url for url in calls))
         self.assertTrue(any("messages" in url for url in calls))
 
     def test_health_unknown_probes_all(self):
@@ -84,6 +87,8 @@ class ProtocolSelectionTests(unittest.TestCase):
                 "https://example.com", "sk-test", supports_openai=False, supports_anthropic=False
             )
         self.assertEqual(result["status"], "up")
+        self.assertTrue(result["supports_openai"])
+        self.assertFalse(result["supports_anthropic"])
         self.assertTrue(any("models" in url for url in calls))
         self.assertTrue(any("messages" in url for url in calls))
 

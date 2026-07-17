@@ -28,7 +28,7 @@ class CoreTests(unittest.TestCase):
         with patch("core.http._request", side_effect=responses):
             result = core.classify("https://example.com", "sk-test")
         self.assertEqual(result["status"], "auth_error")
-        self.assertTrue(result["supports_anthropic"])
+        self.assertFalse(result["supports_anthropic"])
 
     def test_mixed_protocol_auth_and_success_is_up(self):
         responses = [(401, "", 2, "HTTP 401"), (200, "{}", 3, None)]
@@ -36,7 +36,7 @@ class CoreTests(unittest.TestCase):
             result = core.classify("https://example.com", "sk-test")
         self.assertEqual(result["status"], "up")
         self.assertFalse(result.get("error"))
-        self.assertTrue(result["supports_openai"])
+        self.assertFalse(result["supports_openai"])
         self.assertTrue(result["supports_anthropic"])
 
     def test_mixed_protocol_success_clears_secondary_error(self):
@@ -85,6 +85,8 @@ class CoreTests(unittest.TestCase):
         with patch("core.http._request", side_effect=responses):
             result = core.classify("https://example.com", "sk-test")
         self.assertEqual(result["status"], "auth_error")
+        self.assertFalse(result["supports_openai"])
+        self.assertFalse(result["supports_anthropic"])
 
     def test_model_result_does_not_replace_protocol_status(self):
         responses = [(200, '{"data":[]}', 1, None), (404, "", 1, "HTTP 404"), (404, "", 1, "HTTP 404")]
