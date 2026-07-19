@@ -24,11 +24,28 @@ APIKEYCONFIG_REDIS_USERNAME
 APIKEYCONFIG_REDIS_PASSWORD
 ```
 
-On a MySQL startup, `db.init_db()` creates or upgrades `keys`, `settings`,
-`users`, and `sessions`; the session table has a foreign key to users and the
-monitor/session indexes are created with the schema.  Connection passwords are
-never returned from the HTTP API, included in backups, or written to logs.
-Avoid committing a configuration file that contains real connection passwords.
+On startup, `db.init_db()` creates or upgrades `tbl_keys`, `tbl_settings`,
+`tbl_users`, and `tbl_sessions`; the session table has a foreign key to users
+and the monitor/session indexes are created with the schema. Connection
+passwords are never returned from the HTTP API, included in backups, or
+written to logs. Avoid committing a configuration file that contains real
+connection passwords.
+
+## Table-name upgrade and recovery
+
+Existing databases using the legacy `keys`, `settings`, `users`, and `sessions`
+names are upgraded in place to the `tbl_*` names at startup. The migration
+preserves rows, primary keys, indexes, and the session-to-user foreign key. It
+is idempotent: starting again after a successful rename makes no further
+schema-name changes.
+
+Before deploying this release, make a restorable backup while the application
+is stopped: copy the SQLite database file, or create a MySQL logical backup.
+If both a legacy table and its `tbl_*` target already exist, startup stops with
+a collision error and makes no merge or deletion; restore or reconcile from
+the backup before retrying. After the new version has written data, recover to
+the old application version by restoring the pre-upgrade backup rather than
+trying to merge reverse-renamed tables.
 
 Redis is optional and is currently activated only with the MySQL primary
 store.  It is a read-through cache for masked API-key lists/details and public

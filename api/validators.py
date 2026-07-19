@@ -104,6 +104,17 @@ def ids_payload(data):
     return out
 
 
+def user_enabled_payload(data):
+    if not isinstance(data, dict) or "enabled" not in data:
+        raise ValueError("enabled is required")
+    value = data["enabled"]
+    if isinstance(value, bool):
+        return value
+    if value in (0, 1, "0", "1"):
+        return bool(int(value))
+    raise ValueError("enabled must be a boolean")
+
+
 def normalize_webdav_remote_path(value):
     remote_path = str(value or "").strip()
     if not remote_path:

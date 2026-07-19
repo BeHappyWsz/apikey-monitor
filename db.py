@@ -19,6 +19,22 @@ _FALLBACK_DEFAULTS = {
     "request_timeout_sec": "45", "auto_classify_on_add": "1",
     "ui_refresh_interval_sec": "15",
 }
+_SETTING_NAMES = {
+    "server_host": "服务监听地址",
+    "server_port": "服务监听端口",
+    "global_monitor_enabled": "全局监测开关",
+    "global_interval_sec": "正常 Key 监测间隔（秒）",
+    "down_recheck_interval_sec": "异常 Key 复检间隔（秒）",
+    "concurrency": "监测并发数",
+    "request_timeout_sec": "探测请求超时（秒）",
+    "auto_classify_on_add": "新增 Key 自动识别开关",
+    "ui_refresh_interval_sec": "前端列表刷新间隔（秒）",
+    "webdav_server": "WebDAV 服务器地址",
+    "webdav_username": "WebDAV 用户名",
+    "webdav_remote_path": "WebDAV 远程备份路径",
+    "_webdav_password": "WebDAV 应用密码",
+    "_webdav_last_sync": "WebDAV 最近同步状态",
+}
 
 
 _list_generation = 0
@@ -28,6 +44,12 @@ _cache_retry_at = 0
 _CACHE_TTL_SECONDS = 60
 _PUBLIC_KEY_CACHE_PREFIX = "apikey-monitor:public-key:"
 _PUBLIC_SETTINGS_CACHE_KEY = "apikey-monitor:public-settings"
+_TABLE_RENAMES = (
+    ("keys", "tbl_keys"),
+    ("settings", "tbl_settings"),
+    ("users", "tbl_users"),
+    ("sessions", "tbl_sessions"),
+)
 
 
 def _private_config():
@@ -142,7 +164,7 @@ class _MyRow(dict):
 class _MyCursor:
     def __init__(self, cursor): self._cursor = cursor
     @staticmethod
-    def _sql(sql): return re.sub(r"\bkeys\b", "`keys`", sql.replace("?", "%s"))
+    def _sql(sql): return sql.replace("?", "%s")
     def execute(self, sql, args=None): self._cursor.execute(self._sql(sql), args); return self
     def executemany(self, sql, args): self._cursor.executemany(self._sql(sql), args); return self
     def fetchone(self):
@@ -203,7 +225,7 @@ def get_list_revision():
                    COALESCE(MAX(id), 0) AS max_id,
                    COALESCE(SUM(sort_order), 0) AS sum_sort,
                    COALESCE(SUM(monitor_enabled), 0) AS mon
-            FROM keys
+            FROM tbl_keys
             """
         ).fetchone()
     return (
@@ -282,26 +304,82 @@ def connection(write=False):
 
 
 def _migrate(conn):
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(keys)")}
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(tbl_keys)")}
     for col, decl in (("check_model", "TEXT DEFAULT ''"), ("model_status", "TEXT DEFAULT 'unknown'"),
                       ("model_latency_ms", "INTEGER"), ("model_last_check_at", "INTEGER"),
                       ("model_last_error", "TEXT DEFAULT ''"), ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''")):
         if col not in cols:
-            conn.execute(f"ALTER TABLE keys ADD COLUMN {col} {decl}")
-    conn.execute("PRAGMA user_version=4")
-    # webdav_last_sync was renamed to "_webdav_last_sync" (runtime state) so it
-    # stays out of the /api/settings surface. Drop legacy unprefixed rows.
-    conn.execute("DELETE FROM settings WHERE k = 'webdav_last_sync'")
-    # request_timeout_sec default 15 -> 30: a real /messages generation on slow
-    # or reasoning gateways takes 5-20s (occasionally ~30s); the old 15s default
-    # timed out and falsely marked working Anthropic endpoints as unsupported.
-    # Bump only the untouched old default so explicit user values are preserved.
-    _to_row = conn.execute("SELECT v FROM settings WHERE k='request_timeout_sec'").fetchone()
+            conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {col} {decl}")
+    settings_cols = {row[1] for row in conn.execute("PRAGMA table_info(tbl_settings)")}
+    if "name" not in settings_cols:
+        conn.execute("ALTER TABLE tbl_settings ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+    _backfill_setting_names(conn)
+    conn.execute("PRAGMA user_version=7")
+    conn.execute("DELETE FROM tbl_settings WHERE k = 'webdav_last_sync'")
+    _to_row = conn.execute("SELECT v FROM tbl_settings WHERE k='request_timeout_sec'").fetchone()
     if _to_row and str(_to_row["v"]) == "15":
-        conn.execute("UPDATE settings SET v='45' WHERE k='request_timeout_sec'")
-    user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+        conn.execute("UPDATE tbl_settings SET v='45' WHERE k='request_timeout_sec'")
+    user_cols = {row[1] for row in conn.execute("PRAGMA table_info(tbl_users)")}
     if "must_change_password" not in user_cols:
-        conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE tbl_users ADD COLUMN must_change_password INTEGER DEFAULT 0")
+    if "enabled" not in user_cols:
+        conn.execute("ALTER TABLE tbl_users ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+
+
+def _setting_name(key):
+    key = str(key)
+    return _SETTING_NAMES.get(key, f"自定义设置：{key}")
+
+
+def _backfill_setting_names(conn):
+    rows = conn.execute("SELECT k FROM tbl_settings").fetchall()
+    conn.executemany("UPDATE tbl_settings SET name=? WHERE k=?",
+                     [(_setting_name(row["k"]), row["k"]) for row in rows])
+
+
+def _setting_rows(items):
+    return [(key, str(value), _setting_name(key)) for key, value in items.items()]
+
+
+def _sqlite_table_names(conn):
+    return {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+
+def _migrate_table_names_sqlite(conn):
+    names = _sqlite_table_names(conn)
+    collisions = [f"{old}/{new}" for old, new in _TABLE_RENAMES if old in names and new in names]
+    if collisions:
+        raise RuntimeError("database table-name migration stopped: both legacy and tbl_* tables exist: "
+                           + ", ".join(collisions) + "; restore or reconcile from backup before retrying")
+    for old, new in _TABLE_RENAMES:
+        if old in names:
+            conn.execute(f"ALTER TABLE {old} RENAME TO {new}")
+
+
+def _mysql_table_names(conn):
+    names = tuple(name for pair in _TABLE_RENAMES for name in pair)
+    marks = ",".join("?" for _ in names)
+    rows = conn.execute(
+        f"SELECT table_name AS name FROM information_schema.tables "
+        f"WHERE table_schema=DATABASE() AND table_name IN ({marks})", names)
+    return {row["name"] for row in rows}
+
+
+def _quote_mysql_identifier(name):
+    return "`" + name.replace("`", "``") + "`"
+
+
+def _migrate_table_names_mysql(conn):
+    names = _mysql_table_names(conn)
+    collisions = [f"{old}/{new}" for old, new in _TABLE_RENAMES if old in names and new in names]
+    if collisions:
+        raise RuntimeError("database table-name migration stopped: both legacy and tbl_* tables exist: "
+                           + ", ".join(collisions) + "; restore or reconcile from backup before retrying")
+    renames = [(old, new) for old, new in _TABLE_RENAMES if old in names]
+    if renames:
+        pairs = ", ".join(f"{_quote_mysql_identifier(old)} TO {_quote_mysql_identifier(new)}"
+                          for old, new in renames)
+        conn.execute(f"RENAME TABLE {pairs}")
 
 
 def init_db():
@@ -310,8 +388,8 @@ def init_db():
         return
     with connection(write=True) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.executescript("""
-        CREATE TABLE IF NOT EXISTS keys (
+        _migrate_table_names_sqlite(conn)
+        conn.execute("""CREATE TABLE IF NOT EXISTS tbl_keys (
             id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT DEFAULT '', base_url TEXT NOT NULL,
             api_key TEXT NOT NULL, supports_anthropic INTEGER DEFAULT 0,
             supports_openai INTEGER DEFAULT 0, models TEXT DEFAULT '[]', status TEXT DEFAULT 'unknown',
@@ -320,58 +398,54 @@ def init_db():
             created_at INTEGER, check_model TEXT DEFAULT '', model_status TEXT DEFAULT 'unknown',
             model_latency_ms INTEGER, model_last_check_at INTEGER, model_last_error TEXT DEFAULT '',
             sort_order INTEGER DEFAULT 0, check_path TEXT DEFAULT ''
-        );
-        CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT);
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            must_change_password INTEGER DEFAULT 0,
-            created_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS sessions (
-            token_hash TEXT PRIMARY KEY,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            csrf_token TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            expires_at INTEGER NOT NULL,
-            last_seen_at INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-        """)
+        )""")
+        conn.execute("CREATE TABLE IF NOT EXISTS tbl_settings (k TEXT PRIMARY KEY, v TEXT, name TEXT NOT NULL DEFAULT '')")
+        conn.execute("""CREATE TABLE IF NOT EXISTS tbl_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL, must_change_password INTEGER DEFAULT 0,
+            enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS tbl_sessions (
+            token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES tbl_users(id) ON DELETE CASCADE,
+            csrf_token TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON tbl_sessions(expires_at)")
         _migrate(conn)
-        # Seed the settings table only on first run (empty table). config.json
-        # is a read-only seed; afterwards the table is the single source of
-        # truth and config.json is never rewritten by the runtime.
-        if conn.execute("SELECT 1 FROM settings LIMIT 1").fetchone() is None:
-            for key, value in _load_defaults().items():
-                conn.execute("INSERT INTO settings(k,v) VALUES(?,?)", (key, value))
+        if conn.execute("SELECT 1 FROM tbl_settings LIMIT 1").fetchone() is None:
+            conn.executemany("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?)", _setting_rows(_load_defaults()))
 
 
 def _init_mysql():
     with connection(write=True) as conn:
+        _migrate_table_names_mysql(conn)
         statements = [
-            """CREATE TABLE IF NOT EXISTS keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,sort_order BIGINT DEFAULT 0,check_path TEXT,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at)) CHARACTER SET utf8mb4""",
-            "CREATE TABLE IF NOT EXISTS settings (k VARCHAR(191) PRIMARY KEY,v LONGTEXT) CHARACTER SET utf8mb4",
-            "CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY AUTO_INCREMENT,username VARCHAR(64) NOT NULL UNIQUE,password_hash TEXT NOT NULL,must_change_password TINYINT DEFAULT 0,created_at BIGINT NOT NULL) CHARACTER SET utf8mb4",
-            "CREATE TABLE IF NOT EXISTS sessions (token_hash CHAR(64) PRIMARY KEY,user_id BIGINT NOT NULL,csrf_token TEXT NOT NULL,created_at BIGINT NOT NULL,expires_at BIGINT NOT NULL,last_seen_at BIGINT NOT NULL,INDEX idx_sessions_expires_at(expires_at),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) CHARACTER SET utf8mb4",
+            """CREATE TABLE IF NOT EXISTS tbl_keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,sort_order BIGINT DEFAULT 0,check_path TEXT,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at)) CHARACTER SET utf8mb4""",
+            "CREATE TABLE IF NOT EXISTS tbl_settings (k VARCHAR(191) PRIMARY KEY,v LONGTEXT,name VARCHAR(255) NOT NULL DEFAULT '') CHARACTER SET utf8mb4",
+            "CREATE TABLE IF NOT EXISTS tbl_users (id BIGINT PRIMARY KEY AUTO_INCREMENT,username VARCHAR(64) NOT NULL UNIQUE,password_hash TEXT NOT NULL,must_change_password TINYINT DEFAULT 0,enabled TINYINT NOT NULL DEFAULT 1,created_at BIGINT NOT NULL) CHARACTER SET utf8mb4",
+            "CREATE TABLE IF NOT EXISTS tbl_sessions (token_hash CHAR(64) PRIMARY KEY,user_id BIGINT NOT NULL,csrf_token TEXT NOT NULL,created_at BIGINT NOT NULL,expires_at BIGINT NOT NULL,last_seen_at BIGINT NOT NULL,INDEX idx_sessions_expires_at(expires_at),FOREIGN KEY(user_id) REFERENCES tbl_users(id) ON DELETE CASCADE) CHARACTER SET utf8mb4",
         ]
-        for statement in statements: conn.execute(statement)
-        # Existing early development databases may pre-date the password-change
-        # flag.  Fresh schemas above already include it; this is additive only.
+        for statement in statements:
+            conn.execute(statement)
         user_columns = {row["COLUMN_NAME"] for row in conn.execute(
             "SELECT COLUMN_NAME FROM information_schema.columns "
-            "WHERE table_schema=DATABASE() AND table_name='users'")}
+            "WHERE table_schema=DATABASE() AND table_name='tbl_users'")}
         if "must_change_password" not in user_columns:
-            conn.execute("ALTER TABLE users ADD COLUMN must_change_password TINYINT DEFAULT 0")
-        if conn.execute("SELECT 1 FROM settings LIMIT 1").fetchone() is None:
-            for key, value in _load_defaults().items():
-                conn.execute("INSERT INTO settings(k,v) VALUES(?,?)", (key, value))
+            conn.execute("ALTER TABLE tbl_users ADD COLUMN must_change_password TINYINT DEFAULT 0")
+        if "enabled" not in user_columns:
+            conn.execute("ALTER TABLE tbl_users ADD COLUMN enabled TINYINT NOT NULL DEFAULT 1")
+        settings_columns = {row["COLUMN_NAME"] for row in conn.execute(
+            "SELECT COLUMN_NAME FROM information_schema.columns "
+            "WHERE table_schema=DATABASE() AND table_name='tbl_settings'")}
+        if "name" not in settings_columns:
+            conn.execute("ALTER TABLE tbl_settings ADD COLUMN name VARCHAR(255) NOT NULL DEFAULT ''")
+        _backfill_setting_names(conn)
+        if conn.execute("SELECT 1 FROM tbl_settings LIMIT 1").fetchone() is None:
+            conn.executemany("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?)", _setting_rows(_load_defaults()))
 
 
 def get_all_settings():
     with connection() as conn:
-        return {row["k"]: row["v"] for row in conn.execute("SELECT k,v FROM settings")}
+        return {row["k"]: row["v"] for row in conn.execute("SELECT k,v FROM tbl_settings")}
 
 
 def get_public_settings():
@@ -390,89 +464,104 @@ def set_settings(items):
     is a read-only seed and is never rewritten."""
     normalized = {key: str(value) for key, value in items.items()}
     with connection(write=True) as conn:
-        for key, value in normalized.items():
+        for key, value, name in _setting_rows(normalized):
             if storage_backend() == "mysql":
-                conn.execute("INSERT INTO settings(k,v) VALUES(?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)", (key, value))
+                conn.execute("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?) ON DUPLICATE KEY UPDATE v=VALUES(v),name=VALUES(name)",
+                             (key, value, name))
             else:
-                conn.execute("INSERT INTO settings(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (key, value))
+                conn.execute("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v,name=excluded.name",
+                             (key, value, name))
     _invalidate_public_cache()
 
 
 def replace_settings(items):
     """Replace the whole settings table (used by restart orchestration)."""
     with connection(write=True) as conn:
-        conn.execute("DELETE FROM settings")
-        conn.executemany("INSERT INTO settings(k,v) VALUES(?,?)", [(key, str(value)) for key, value in items.items()])
+        conn.execute("DELETE FROM tbl_settings")
+        conn.executemany("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?)", _setting_rows(items))
     _invalidate_public_cache()
 
 
 def count_users():
     with connection() as conn:
-        return int(conn.execute("SELECT COUNT(*) FROM users").fetchone()[0])
+        return int(conn.execute("SELECT COUNT(*) FROM tbl_users").fetchone()[0])
 
 
 def get_user_by_username(username):
     with connection() as conn:
-        row = conn.execute("SELECT id,username,password_hash,must_change_password,created_at FROM users WHERE username=?", (username,)).fetchone()
+        row = conn.execute("SELECT id,username,password_hash,must_change_password,enabled,created_at FROM tbl_users WHERE username=?", (username,)).fetchone()
     return dict(row) if row else None
 
 
 def get_user(user_id):
     with connection() as conn:
-        row = conn.execute("SELECT id,username,must_change_password,created_at FROM users WHERE id=?", (user_id,)).fetchone()
+        row = conn.execute("SELECT id,username,must_change_password,enabled,created_at FROM tbl_users WHERE id=?", (user_id,)).fetchone()
     return dict(row) if row else None
 
 
 def list_users():
     with connection() as conn:
-        return [dict(row) for row in conn.execute("SELECT id,username,created_at FROM users ORDER BY id ASC")]
+        return [dict(row) for row in conn.execute("SELECT id,username,enabled,created_at FROM tbl_users ORDER BY id ASC")]
 
 
-def create_user(username, password_hash, must_change_password=False):
+def create_user(username, password_hash, must_change_password=False, enabled=True):
     with connection(write=True) as conn:
-        cur = conn.execute("INSERT INTO users(username,password_hash,must_change_password,created_at) VALUES(?,?,?,?)",
-                           (username, password_hash, int(bool(must_change_password)), int(time.time())))
+        cur = conn.execute("INSERT INTO tbl_users(username,password_hash,must_change_password,enabled,created_at) VALUES(?,?,?,?,?)",
+                           (username, password_hash, int(bool(must_change_password)), int(bool(enabled)), int(time.time())))
         return int(cur.lastrowid)
 
 
 def update_user_password_hash(user_id, password_hash, must_change_password=None):
     with connection(write=True) as conn:
         if must_change_password is None:
-            conn.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash, user_id))
+            conn.execute("UPDATE tbl_users SET password_hash=? WHERE id=?", (password_hash, user_id))
         else:
-            conn.execute("UPDATE users SET password_hash=?,must_change_password=? WHERE id=?",
+            conn.execute("UPDATE tbl_users SET password_hash=?,must_change_password=? WHERE id=?",
                          (password_hash, int(bool(must_change_password)), user_id))
+
+
+def set_user_enabled(user_id, enabled):
+    """Change account availability and revoke its sessions when disabling it."""
+    with connection(write=True) as conn:
+        row = conn.execute("SELECT id FROM tbl_users WHERE id=?", (user_id,)).fetchone()
+        if not row:
+            return None
+        enabled = int(bool(enabled))
+        conn.execute("UPDATE tbl_users SET enabled=? WHERE id=?", (enabled, user_id))
+        if not enabled:
+            conn.execute("DELETE FROM tbl_sessions WHERE user_id=?", (user_id,))
+    return get_user(user_id)
 
 
 def create_session(token_hash, user_id, csrf_token, expires_at):
     now = int(time.time())
     with connection(write=True) as conn:
-        conn.execute("INSERT INTO sessions(token_hash,user_id,csrf_token,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?,?)",
+        conn.execute("INSERT INTO tbl_sessions(token_hash,user_id,csrf_token,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?,?)",
                      (token_hash, user_id, csrf_token, now, int(expires_at), now))
 
 
 def get_session(token_hash):
     with connection() as conn:
         row = conn.execute("""SELECT s.token_hash,s.csrf_token,s.expires_at,s.last_seen_at,
-                                   u.id AS user_id,u.username,u.must_change_password
-                            FROM sessions s JOIN users u ON u.id=s.user_id
+                                   u.id AS user_id,u.username,u.must_change_password,u.enabled
+                            FROM tbl_sessions s JOIN tbl_users u ON u.id=s.user_id
                             WHERE s.token_hash=?""", (token_hash,)).fetchone()
     return dict(row) if row else None
 
 
 def touch_session(token_hash):
     with connection(write=True) as conn:
-        conn.execute("UPDATE sessions SET last_seen_at=? WHERE token_hash=?", (int(time.time()), token_hash))
+        conn.execute("UPDATE tbl_sessions SET last_seen_at=? WHERE token_hash=?", (int(time.time()), token_hash))
 
 
 def delete_session(token_hash):
     with connection(write=True) as conn:
-        conn.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash,))
+        conn.execute("DELETE FROM tbl_sessions WHERE token_hash=?", (token_hash,))
 
 
 def delete_expired_sessions(now=None):
     with connection(write=True) as conn:
-        return conn.execute("DELETE FROM sessions WHERE expires_at<=?", (int(now or time.time()),)).rowcount
+        return conn.execute("DELETE FROM tbl_sessions WHERE expires_at<=?", (int(now or time.time()),)).rowcount
 
 
 def _row_to_dict(row):
@@ -512,7 +601,7 @@ def list_keys(public=False):
         if cached is not None: return cached
     with connection() as conn:
         rows = [_row_to_dict(row) for row in conn.execute(
-            "SELECT * FROM keys ORDER BY CASE WHEN sort_order=0 THEN 1 ELSE 0 END, sort_order ASC, id DESC")]
+            "SELECT * FROM tbl_keys ORDER BY CASE WHEN sort_order=0 THEN 1 ELSE 0 END, sort_order ASC, id DESC")]
     if public:
         result = [public_key(row) for row in rows]
         _cache_set(cache_name, result)
@@ -526,7 +615,7 @@ def get_key(key_id, public=False):
         cached = _cache_get(cache_name)
         if cached is not None: return cached
     with connection() as conn:
-        row = conn.execute("SELECT * FROM keys WHERE id=?", (key_id,)).fetchone()
+        row = conn.execute("SELECT * FROM tbl_keys WHERE id=?", (key_id,)).fetchone()
         entry = _row_to_dict(row) if row else None
     if public:
         result = public_key(entry)
@@ -539,7 +628,7 @@ def get_key(key_id, public=False):
 def add_key(data):
     with connection(write=True) as conn:
         sort_order = _next_sort_order(conn)
-        cur = conn.execute("""INSERT INTO keys
+        cur = conn.execute("""INSERT INTO tbl_keys
             (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order,check_path)
             VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
             (data.get("name", ""), data["base_url"], data["api_key"], "unknown",
@@ -554,7 +643,7 @@ def add_keys_batch(items):
     ids = []
     skipped_duplicate = 0
     with connection(write=True) as conn:
-        existing = {(r["base_url"], r["api_key"]) for r in conn.execute("SELECT base_url,api_key FROM keys")}
+        existing = {(r["base_url"], r["api_key"]) for r in conn.execute("SELECT base_url,api_key FROM tbl_keys")}
         sort_order = _next_sort_order(conn)
         for item in items:
             marker = (item["base_url"], item["api_key"])
@@ -562,7 +651,7 @@ def add_keys_batch(items):
                 skipped_duplicate += 1
                 continue
             existing.add(marker)
-            cur = conn.execute("""INSERT INTO keys
+            cur = conn.execute("""INSERT INTO tbl_keys
             (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order,check_path)
             VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                 (item.get("name", ""), marker[0], marker[1], "unknown",
@@ -574,7 +663,7 @@ def add_keys_batch(items):
     return ids, skipped_duplicate
 
 def _next_sort_order(conn):
-    value = conn.execute("SELECT MIN(sort_order) FROM keys").fetchone()[0]
+    value = conn.execute("SELECT MIN(sort_order) FROM tbl_keys").fetchone()[0]
     if value is None:
         return 10
     next_value = int(value) - 10
@@ -591,13 +680,13 @@ def reorder_keys(ids):
             ordered_ids.append(key_id)
     with connection(write=True) as conn:
         existing = [row["id"] for row in conn.execute(
-            "SELECT id FROM keys ORDER BY CASE WHEN sort_order=0 THEN 1 ELSE 0 END, sort_order ASC, id DESC")]
+            "SELECT id FROM tbl_keys ORDER BY CASE WHEN sort_order=0 THEN 1 ELSE 0 END, sort_order ASC, id DESC")]
         existing_set = set(existing)
         requested = [key_id for key_id in ordered_ids if key_id in existing_set]
         requested_set = set(requested)
         final_ids = requested + [key_id for key_id in existing if key_id not in requested_set]
         for index, key_id in enumerate(final_ids, start=1):
-            conn.execute("UPDATE keys SET sort_order=? WHERE id=?", (index * 10, key_id))
+            conn.execute("UPDATE tbl_keys SET sort_order=? WHERE id=?", (index * 10, key_id))
     touch_list_generation()
     return final_ids
 
@@ -616,7 +705,7 @@ def update_key(key_id, data):
                        "latency_ms=NULL", "last_check_at=NULL", "last_error=''", "model_status='unknown'",
                        "model_latency_ms=NULL", "model_last_check_at=NULL", "model_last_error=''"])
     with connection(write=True) as conn:
-        cur = conn.execute(f"UPDATE keys SET {', '.join(fields)} WHERE id=?", (*values, key_id))
+        cur = conn.execute(f"UPDATE tbl_keys SET {', '.join(fields)} WHERE id=?", (*values, key_id))
         ok = cur.rowcount > 0
     if ok:
         touch_list_generation()
@@ -628,7 +717,7 @@ def delete_keys(ids):
         return 0
     with connection(write=True) as conn:
         marks = ",".join("?" for _ in ids)
-        count = conn.execute(f"DELETE FROM keys WHERE id IN ({marks})", list(ids)).rowcount
+        count = conn.execute(f"DELETE FROM tbl_keys WHERE id IN ({marks})", list(ids)).rowcount
     if count:
         touch_list_generation()
     return count
@@ -644,13 +733,13 @@ def update_status(key_id, status, latency_ms, error, supports_anthropic=None, su
     if models is not None:
         sets.append("models=?"); values.append(json.dumps(models[:200], ensure_ascii=False))
     with connection(write=True) as conn:
-        conn.execute(f"UPDATE keys SET {', '.join(sets)} WHERE id=?", (*values, key_id))
+        conn.execute(f"UPDATE tbl_keys SET {', '.join(sets)} WHERE id=?", (*values, key_id))
     touch_list_generation()
 
 
 def update_model_status(key_id, status, latency_ms, error):
     with connection(write=True) as conn:
-        conn.execute("""UPDATE keys SET model_status=?, model_latency_ms=?, model_last_error=?,
+        conn.execute("""UPDATE tbl_keys SET model_status=?, model_latency_ms=?, model_last_error=?,
                       model_last_check_at=? WHERE id=?""",
                      (status, latency_ms, (error or "")[:300], int(time.time()), key_id))
     touch_list_generation()
@@ -662,7 +751,7 @@ def get_due_keys(now, up_interval, down_interval, limit=None):
     limit: optional max rows (used by monitor tick cap / jitter-by-batch).
     """
     with connection() as conn:
-        rows = conn.execute("SELECT * FROM keys WHERE monitor_enabled=1").fetchall()
+        rows = conn.execute("SELECT * FROM tbl_keys WHERE monitor_enabled=1").fetchall()
     due = []
     for row in rows:
         item = _row_to_dict(row)

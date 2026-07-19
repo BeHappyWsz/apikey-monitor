@@ -1,5 +1,5 @@
 import { restartCandidates } from "./state.js";
-import { $, copyText, esc, toast } from "./utils.js";
+import { $, copyText, esc, toast, withBusyButton } from "./utils.js";
 
 export function initSettings({ api, state, openModal, closeModal, waitForHealth, onSettingsApplied }) {
   async function loadSettings() {
@@ -20,24 +20,32 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
     return settings;
   }
 
-  $("#btn-system-settings").addEventListener("click", async () => {
-    const settings = await loadSettings();
-    $("#set-host").value = settings.server_host;
-    $("#set-port").value = settings.server_port;
-    $("#lan-warning").hidden = settings.server_host !== "0.0.0.0";
-    openModal("modal-system-settings");
-  });
+  $("#btn-system-settings").addEventListener("click", () => withBusyButton($("#btn-system-settings"), async () => {
+    try {
+      const settings = await loadSettings();
+      $("#set-host").value = settings.server_host;
+      $("#set-port").value = settings.server_port;
+      $("#lan-warning").hidden = settings.server_host !== "0.0.0.0";
+      openModal("modal-system-settings");
+    } catch {
+      // api() has already shown the actionable server error.
+    }
+  }));
 
-  $("#btn-monitor-settings").addEventListener("click", async () => {
-    const settings = await loadSettings();
-    $("#set-enabled").value = settings.global_monitor_enabled;
-    $("#set-interval").value = settings.global_interval_sec;
-    $("#set-down").value = settings.down_recheck_interval_sec;
-    $("#set-conc").value = settings.concurrency;
-    $("#set-timeout").value = settings.request_timeout_sec;
-    $("#set-ui-refresh").value = settings.ui_refresh_interval_sec ?? 15;
-    openModal("modal-monitor-settings");
-  });
+  $("#btn-monitor-settings").addEventListener("click", () => withBusyButton($("#btn-monitor-settings"), async () => {
+    try {
+      const settings = await loadSettings();
+      $("#set-enabled").value = settings.global_monitor_enabled;
+      $("#set-interval").value = settings.global_interval_sec;
+      $("#set-down").value = settings.down_recheck_interval_sec;
+      $("#set-conc").value = settings.concurrency;
+      $("#set-timeout").value = settings.request_timeout_sec;
+      $("#set-ui-refresh").value = settings.ui_refresh_interval_sec ?? 15;
+      openModal("modal-monitor-settings");
+    } catch {
+      // api() has already shown the actionable server error.
+    }
+  }));
 
   $("#set-host").addEventListener("change", () => {
     $("#lan-warning").hidden = $("#set-host").value !== "0.0.0.0";

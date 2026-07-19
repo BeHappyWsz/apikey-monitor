@@ -18,6 +18,7 @@ _KEY_RE = re.compile(r"^/api/keys/(\d+)$")
 _KEY_ACTION_RE = re.compile(r"^/api/keys/(\d+)/(check|check_model|export|secret)$")
 _TASK_RE = re.compile(r"^/api/tasks/([A-Za-z0-9_-]+)$")
 _RESTART_RE = re.compile(r"^/api/system/restart/([A-Za-z0-9_-]+)$")
+_AUTH_USER_RE = re.compile(r"^/api/auth/users/(\d+)$")
 
 
 class ApiError(Exception):
@@ -114,6 +115,16 @@ def route(method, path, query, body, server, request=None):
             return 201, {"user": AUTH.create_user(body.get("username"), body.get("password"))}
         except AuthError as exc:
             raise ApiError(exc.status, exc.code, str(exc))
+    match = _AUTH_USER_RE.fullmatch(path)
+    if method == "PUT" and match:
+        try:
+            enabled = validators.user_enabled_payload(body)
+            user = AUTH.set_user_enabled(session["user"]["id"], _id(match), enabled)
+            return 200, {"user": user}
+        except AuthError as exc:
+            raise ApiError(exc.status, exc.code, str(exc))
+        except ValueError as exc:
+            raise ApiError(400, "invalid_user", str(exc))
     if method == "GET" and path == "/api/keys":
         return 200, KEYS.list()
     if method == "GET" and path == "/api/keys/revision":

@@ -15,12 +15,17 @@
       <p>本地密钥运维控制台</p>
     </div>
   </div>
-  <div class="top-actions">
-    <button class="btn ghost" id="btn-user-manage">用户管理</button>
-    <button class="btn ghost" id="btn-logout">退出 <span id="auth-user"></span></button>
-    <button class="btn ghost" id="btn-system-settings">⚙ 系统设置</button>
-    <button class="btn ghost" id="btn-monitor-settings">◌ 监测设置</button>
-    <button class="btn ghost" id="btn-sync">☁ 云同步</button>
+  <div class="top-actions" aria-label="控制台操作">
+    <div class="top-settings-group" role="group" aria-label="配置与同步">
+      <button class="btn ghost top-action" id="btn-system-settings" type="button" aria-haspopup="dialog"><span class="top-action-icon" aria-hidden="true">⚙</span><span>系统设置</span></button>
+      <button class="btn ghost top-action" id="btn-monitor-settings" type="button" aria-haspopup="dialog"><span class="top-action-icon" aria-hidden="true">◌</span><span>监测设置</span></button>
+      <button class="btn ghost top-action" id="btn-sync" type="button" aria-haspopup="dialog"><span class="top-action-icon" aria-hidden="true">☁</span><span>云同步</span></button>
+    </div>
+    <div class="top-account-group" role="group" aria-label="账户操作">
+      <button class="btn ghost top-action" id="btn-user-manage" type="button" aria-haspopup="dialog"><span class="top-action-icon" aria-hidden="true">◉</span><span>用户管理</span></button>
+      <span class="top-action-divider" aria-hidden="true"></span>
+      <button class="btn ghost top-action top-logout" id="btn-logout" type="button" aria-label="退出当前账户"><span class="account-name" id="auth-user"></span><span>退出</span></button>
+    </div>
   </div>
 </header>
 
@@ -363,11 +368,20 @@
 
 <section class="auth-gate" id="auth-gate" hidden aria-live="polite">
   <form class="auth-card" id="login-form">
-    <div class="logo">AK</div>
-    <h1>管理员登录</h1>
-    <p>请使用系统管理员账户访问 API Key 管理数据。</p>
-    <label>用户名<input id="login-username" autocomplete="username" required></label>
-    <label>密码<input id="login-password" type="password" autocomplete="current-password" required></label>
+    <div class="auth-brand"><div class="logo">AK</div><span>API KEY MONITOR</span></div>
+    <div><h1>管理员登录</h1><p>请使用系统管理员账户访问 API Key 管理数据。</p></div>
+    <label>用户名
+      <div class="auth-input-field">
+        <span class="auth-input-mark" aria-hidden="true">@</span>
+        <input id="login-username" autocomplete="username" placeholder="请输入管理员用户名" required>
+      </div>
+    </label>
+    <label>密码
+      <div class="password-field">
+        <input id="login-password" type="password" autocomplete="current-password" required>
+        <button class="password-toggle" type="button" data-password-toggle="login-password" aria-label="显示密码" aria-pressed="false">显示</button>
+      </div>
+    </label>
     <p class="error-text" id="login-error"></p>
     <button class="btn primary" type="submit">登录</button>
   </form>
@@ -376,7 +390,7 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-user-manage">
   <div class="modal-card">
     <div class="modal-head"><h2>用户管理</h2><button class="x" type="button" data-close>×</button></div>
-    <p class="hint">所有用户均为管理员，可访问本系统中的 API Key 与设置。</p>
+    <p class="hint">所有用户均为管理员。禁用账号会立即撤销其登录会话，恢复启用后可重新登录。</p>
     <div class="user-list" id="user-list" aria-live="polite"></div>
     <p class="error-text" id="user-list-error"></p>
     <div class="modal-foot">
@@ -408,8 +422,8 @@
   <form class="modal-card" id="password-change-form">
     <div class="modal-head"><h2>请修改初始密码</h2></div>
     <div class="form">
-      <label><span>当前密码</span><input id="current-password" type="password" autocomplete="current-password" required></label>
-      <label><span>新密码</span><input id="replacement-password" type="password" autocomplete="new-password" minlength="12" required></label>
+      <label><span>当前密码</span><div class="password-field"><input id="current-password" type="password" autocomplete="current-password" required><button class="password-toggle" type="button" data-password-toggle="current-password" aria-label="显示密码" aria-pressed="false">显示</button></div></label>
+      <label><span>新密码</span><div class="password-field"><input id="replacement-password" type="password" autocomplete="new-password" minlength="12" required><button class="password-toggle" type="button" data-password-toggle="replacement-password" aria-label="显示密码" aria-pressed="false">显示</button></div></label>
       <p class="hint">默认密码已公开在启动配置中，修改后才可继续使用系统。</p>
       <p class="error-text" id="password-change-error"></p>
     </div>

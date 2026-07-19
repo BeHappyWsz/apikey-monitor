@@ -24,6 +24,22 @@ export function toast(message, timeout = 2600) {
   el._timer = setTimeout(() => el.classList.remove("show"), timeout);
 }
 
+/**
+ * Run a user-triggered action once while making its button unavailable.
+ * Keeping the original label avoids layout shifts in compact toolbars.
+ */
+export async function withBusyButton(button, action) {
+  if (!button || button.disabled) return undefined;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  try {
+    return await action();
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+  }
+}
+
 export async function copyText(text, label = "内容") {
   try {
     await navigator.clipboard.writeText(text || "");

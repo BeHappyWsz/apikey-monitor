@@ -1,4 +1,5 @@
 import { setCsrfToken } from "./api.js";
+import { withBusyButton } from "./utils.js";
 
 export function initAuth({ api, openModal, closeModal, onAuthenticated }) {
   const gate = document.querySelector("#auth-gate");
@@ -7,6 +8,7 @@ export function initAuth({ api, openModal, closeModal, onAuthenticated }) {
   const userList = document.querySelector("#user-list");
   const userListError = document.querySelector("#user-list-error");
   let passwordChangeRequired = false;
+  let currentUserId = null;
 
   const formatCreatedAt = (timestamp) => {
     if (!timestamp) return "未知时间";
@@ -26,11 +28,27 @@ export function initAuth({ api, openModal, closeModal, onAuthenticated }) {
     users.forEach((user) => {
       const item = document.createElement("div");
       item.className = "user-list-item";
+      const info = document.createElement("div");
       const name = document.createElement("strong");
       name.textContent = user.username;
       const meta = document.createElement("span");
-      meta.textContent = `管理员 · 创建于 ${formatCreatedAt(user.created_at)}`;
-      item.append(name, meta);
+      const enabled = user.enabled !== false && user.enabled !== 0;
+      const status = document.createElement("span");
+      status.className = `user-status ${enabled ? "enabled" : "disabled"}`;
+      status.textContent = enabled ? "已启用" : "已禁用";
+      meta.append(status, document.createTextNode(`管理员 · 创建于 ${formatCreatedAt(user.created_at)}`));
+      info.append(name, meta);
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = `btn user-toggle ${enabled ? "danger-soft" : "soft"}`;
+      if (Number(user.id) === currentUserId) {
+        action.disabled = true;
+        action.textContent = "当前账户";
+      } else {
+        action.textContent = enabled ? "禁用" : "启用";
+        action.addEventListener("click", () => { void withBusyButton(action, () => setUserEnabled(user, !enabled)); });
+      }
+      item.append(info, action);
       userList.append(item);
     });
   };
@@ -41,6 +59,16 @@ export function initAuth({ api, openModal, closeModal, onAuthenticated }) {
       renderUsers(data.users || []);
     } catch (error) {
       if (userListError) userListError.textContent = error.message || "加载用户列表失败";
+    }
+  };
+  const setUserEnabled = async (user, enabled) => {
+    if (!enabled && !window.confirm(`确认禁用“${user.username}”吗？该账号的所有登录会话将立即失效。`)) return;
+    if (userListError) userListError.textContent = "";
+    try {
+      await api("PUT", `/api/auth/users/${user.id}`, { enabled });
+      await loadUsers();
+    } catch (error) {
+      if (userListError) userListError.textContent = error.message || "更新用户状态失败";
     }
   };
   const openUserCreate = () => {
@@ -62,12 +90,26 @@ export function initAuth({ api, openModal, closeModal, onAuthenticated }) {
     gate.hidden = false;
     loginError.textContent = "";
     document.querySelector("#login-password").value = "";
+    document.querySelector("#auth-user").textContent = "";
+    currentUserId = null;
   };
+  document.querySelectorAll("[data-password-toggle]").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const input = document.querySelector(`#${toggle.dataset.passwordToggle}`);
+      if (!input) return;
+      const visible = input.type === "password";
+      input.type = visible ? "text" : "password";
+      toggle.textContent = visible ? "隐藏" : "显示";
+      toggle.setAttribute("aria-label", visible ? "隐藏密码" : "显示密码");
+      toggle.setAttribute("aria-pressed", String(visible));
+    });
+  });
   const setAuthenticated = (data) => {
     setCsrfToken(data.csrf_token);
     document.body.classList.remove("auth-required");
     gate.hidden = true;
     document.querySelector("#auth-user").textContent = data.user.username;
+    currentUserId = Number(data.user.id);
     passwordChangeRequired = Boolean(data.user.must_change_password);
   };
   loginForm?.addEventListener("submit", async (event) => {
@@ -85,16 +127,23 @@ export function initAuth({ api, openModal, closeModal, onAuthenticated }) {
       loginError.textContent = error.message || "登录失败";
     }
   });
-  document.querySelector("#btn-logout")?.addEventListener("click", async () => {
-    try { await api("POST", "/api/auth/logout", {}); } catch { /* Session may already be gone. */ }
-    setCsrfToken("");
-    showLogin();
+  const logoutButton = document.querySelector("#btn-logout");
+  logoutButton?.addEventListener("click", () => {
+    if (!window.confirm("确认退出当前账户吗？")) return;
+    void withBusyButton(logoutButton, async () => {
+      try { await api("POST", "/api/auth/logout", {}); } catch { /* Session may already be gone. */ }
+      setCsrfToken("");
+      showLogin();
+    });
   });
-  document.querySelector("#btn-user-manage")?.addEventListener("click", async () => {
+  const userManageButton = document.querySelector("#btn-user-manage");
+  userManageButton?.addEventListener("click", () => { void withBusyButton(userManageButton, async () => {
+    userList?.replaceChildren(Object.assign(document.createElement("p"), { className: "hint", textContent: "正在加载用户列表…" }));
     openModal("modal-user-manage");
     await loadUsers();
-  });
-  document.querySelector("#btn-reload-users")?.addEventListener("click", loadUsers);
+  }); });
+  const reloadUsersButton = document.querySelector("#btn-reload-users");
+  reloadUsersButton?.addEventListener("click", () => { void withBusyButton(reloadUsersButton, loadUsers); });
   document.querySelector("#btn-open-user-create")?.addEventListener("click", openUserCreate);
   document.querySelector("#btn-toggle-new-password")?.addEventListener("click", () => {
     const password = document.querySelector("#new-password");

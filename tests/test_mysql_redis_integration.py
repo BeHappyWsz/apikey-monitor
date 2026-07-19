@@ -29,12 +29,16 @@ class MySqlRedisIntegrationTests(unittest.TestCase):
             db.delete_keys([self.key_id])
         if self.user_id is not None:
             with db.connection(write=True) as conn:
-                conn.execute("DELETE FROM users WHERE id=?", (self.user_id,))
+                conn.execute("DELETE FROM tbl_users WHERE id=?", (self.user_id,))
 
     def test_schema_transaction_and_cache_contract(self):
         with db.connection() as conn:
             tables = {row[0] for row in conn.execute("SHOW TABLES")}
-        self.assertTrue({"keys", "settings", "users", "sessions"} <= tables)
+            setting_columns = {row["COLUMN_NAME"] for row in conn.execute(
+                "SELECT COLUMN_NAME FROM information_schema.columns "
+                "WHERE table_schema=DATABASE() AND table_name='tbl_settings'")}
+        self.assertTrue({"tbl_keys", "tbl_settings", "tbl_users", "tbl_sessions"} <= tables)
+        self.assertTrue({"k", "v", "name"} <= setting_columns)
 
         self.key_id = db.add_key({
             "name": self.marker,
@@ -59,7 +63,7 @@ class MySqlRedisIntegrationTests(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             with db.connection(write=True) as conn:
-                conn.execute("INSERT INTO settings(k,v) VALUES(?,?)", (self.marker, "rollback"))
+                conn.execute("INSERT INTO tbl_settings(k,v) VALUES(?,?)", (self.marker, "rollback"))
                 raise RuntimeError("verify rollback")
         self.assertNotIn(self.marker, db.get_all_settings())
 

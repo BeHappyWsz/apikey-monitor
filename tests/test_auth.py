@@ -54,6 +54,23 @@ class AuthServiceTests(unittest.TestCase):
             self.auth.login("admin", "wrong-password", "127.0.0.1")
         self.assertEqual(ctx.exception.code, "login_rate_limited")
 
+    def test_disabling_user_revokes_sessions_and_blocks_login(self):
+        self.auth.ensure_bootstrap()
+        admin = db.get_user_by_username("admin")
+        created = self.auth.create_user("second.admin", "another-secure-password")
+        session = self.auth.login("second.admin", "another-secure-password", "127.0.0.1")
+        updated = self.auth.set_user_enabled(admin["id"], created["id"], False)
+        self.assertFalse(updated["enabled"])
+        self.assertIsNone(self.auth.current(session["token"]))
+        with self.assertRaises(AuthError) as ctx:
+            self.auth.login("second.admin", "another-secure-password", "127.0.0.1")
+        self.assertEqual((ctx.exception.status, ctx.exception.code), (403, "account_disabled"))
+        self.assertTrue(self.auth.set_user_enabled(admin["id"], created["id"], True)["enabled"])
+        self.assertEqual(self.auth.login("second.admin", "another-secure-password", "127.0.0.1")["user"]["id"], created["id"])
+        with self.assertRaises(AuthError) as ctx:
+            self.auth.set_user_enabled(admin["id"], admin["id"], False)
+        self.assertEqual(ctx.exception.code, "cannot_disable_self")
+
 
 if __name__ == "__main__":
     unittest.main()

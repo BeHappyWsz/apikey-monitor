@@ -1,4 +1,4 @@
-import { $, toast } from "./utils.js";
+import { $, toast, withBusyButton } from "./utils.js";
 
 export function initSync({ api, load, openModal }) {
   function toggleHttpWarn() {
@@ -34,11 +34,12 @@ export function initSync({ api, load, openModal }) {
     } catch { /* ignore */ }
   }
 
-  $("#btn-sync").addEventListener("click", async () => {
+  $("#btn-sync").addEventListener("click", () => withBusyButton($("#btn-sync"), async () => {
+    $("#sync-status").textContent = "正在加载同步配置…";
+    openModal("modal-sync");
     await fillConfig();
     await refreshStatus();
-    openModal("modal-sync");
-  });
+  }));
 
   $("#sync-server").addEventListener("input", toggleHttpWarn);
   $("#btn-sync-save").addEventListener("click", async () => {

@@ -6,11 +6,11 @@
 
 ## Overview
 
-- Engine: **stdlib `sqlite3` only** ? no ORM.
+- Engines: SQLite by default and optional MySQL primary storage; no ORM.
 - Default path: `<repo>/data.db` (override with `APIKEYCONFIG_DB_PATH`).
 - Config seed path: `<repo>/config.json` (override with `APIKEYCONFIG_CONFIG_PATH`).
 - Pattern: **open ? work ? close** per operation; use `connection(write=True)` for commits.
-- Tables: `keys`, `settings` (key/value strings).
+- Tables: `tbl_keys`, `tbl_settings`, `tbl_users`, `tbl_sessions`.
 - Journal: `PRAGMA journal_mode=WAL` on init; `busy_timeout=5000`.
 
 Reference: `db.py`.
@@ -32,7 +32,7 @@ with db.connection(write=True) as conn:
 
 ## Schema
 
-### `keys`
+### `tbl_keys`
 
 | Column | Notes |
 |--------|--------|
@@ -53,10 +53,15 @@ List order SQL:
 ORDER BY CASE WHEN sort_order=0 THEN 1 ELSE 0 END, sort_order ASC, id DESC
 ```
 
-### `settings`
+### `tbl_settings`
 
-- Columns: `k TEXT PRIMARY KEY`, `v TEXT` (all values stored as strings).
+- Columns: `k TEXT PRIMARY KEY`, `v TEXT` (all values stored as strings), and
+  backend-only `name TEXT` (the Chinese description of the setting key).
 - Seeded once with `INSERT OR IGNORE` from `_load_defaults()` / `config.json`.
+- `name` is backfilled during initialization and refreshed on every
+  `set_settings` / `replace_settings` write. It is intentionally excluded from
+  `get_all_settings()` and `/api/settings`; unknown legacy/custom keys use the
+  deterministic label `自定义设置：<key>`.
 
 Known keys (defaults in `_FALLBACK_DEFAULTS`):
 
@@ -70,7 +75,7 @@ Known keys (defaults in `_FALLBACK_DEFAULTS`):
 | `concurrency` | `8` | 1?32 |
 | `request_timeout_sec` | `15` | 3?120 |
 | `auto_classify_on_add` | `1` | stored; **not applied by KeyService yet** (see services-runtime) |
-| `ui_refresh_interval_sec` | `5` | 0 or 3?3600 |
+| `ui_refresh_interval_sec` | `15` | 0 or 3?3600 |
 
 ---
 
@@ -78,9 +83,10 @@ Known keys (defaults in `_FALLBACK_DEFAULTS`):
 
 No external tool. Evolution path:
 
-1. Update `CREATE TABLE IF NOT EXISTS` for fresh installs.
-2. `_migrate(conn)`: `PRAGMA table_info` + conditional `ALTER TABLE ... ADD COLUMN`.
-3. Set `PRAGMA user_version` (currently **3** after migrate).
+1. Run table-name migration before any target `CREATE TABLE IF NOT EXISTS`.
+2. Update `CREATE TABLE IF NOT EXISTS` for fresh installs.
+3. `_migrate(conn)`: `PRAGMA table_info` + conditional `ALTER TABLE ... ADD COLUMN`.
+4. Set `PRAGMA user_version` (currently **7** after migrate).
 
 When adding a column:
 
@@ -89,6 +95,80 @@ When adding a column:
 3. Wire `update_key` / row dict / services if user-editable.
 4. Keep old DBs bootable without manual SQL.
 5. Add a unit test for the new field path.
+
+## Scenario: `tbl_*` table-name migration
+
+### 1. Scope / Trigger
+
+Use this contract whenever a durable table name changes in SQLite or MySQL.
+`db.init_db()` owns migration before normal CRUD begins, so deployed databases
+retain API keys, settings, users, and sessions without a manual SQL step.
+
+### 2. Signatures
+
+- `db.init_db()` calls `_migrate_table_names_sqlite(conn)` or
+  `_migrate_table_names_mysql(conn)` before target schema creation.
+- Legacy-to-target mapping: `keys` → `tbl_keys`, `settings` →
+  `tbl_settings`, `users` → `tbl_users`, `sessions` → `tbl_sessions`.
+- SQLite discovers tables through `sqlite_master`; MySQL uses
+  `information_schema.tables` and a quoted `RENAME TABLE` statement.
+
+### 3. Contracts
+
+- Fresh installations create only the four `tbl_*` tables.
+- The migration preserves row values, primary keys, unique constraints,
+  session-to-user foreign keys, and existing indexes.
+- Runtime SQL must use target names only. Legacy names are allowed solely in
+  the migration mapping and regression fixtures.
+- SQLite's `PRAGMA user_version` is 7 after migration, but table presence is
+  still authoritative because historic databases can have partial schemas.
+
+### 4. Validation & Error Matrix
+
+| Table state | Required behavior |
+| --- | --- |
+| Legacy exists, target absent | Rename atomically, then continue initialization. |
+| Legacy absent, target exists | Treat as already migrated. |
+| Both legacy and target exist | Raise `RuntimeError`; do not merge, overwrite, or delete. |
+| Neither exists | Create the fresh target schema. |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a copied legacy SQLite database starts once, exposes its existing
+  records through the normal API, and starts again without DDL changes.
+- Base: an old database predating user/session tables renames the tables it
+  has, then creates missing target tables normally.
+- Bad: creating an empty `tbl_keys` before checking for legacy `keys`, which
+  looks like a collision and risks hiding the real data.
+
+### 6. Tests Required
+
+- `tests/test_core_db.py` must create a representative legacy SQLite schema
+  with a key, setting, user, and session; assert target names, preserved rows,
+  foreign-key target, and idempotent second initialization.
+- Assert a legacy/target collision raises and leaves operator resolution to a
+  verified backup.
+- `tests/test_mysql_redis_integration.py`, when configured, must assert the
+  target table set and session behavior after `init_db()`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+conn.execute("CREATE TABLE IF NOT EXISTS tbl_keys (...)")
+conn.execute("ALTER TABLE keys RENAME TO tbl_keys")
+```
+
+#### Correct
+
+```python
+_migrate_table_names_sqlite(conn)
+conn.execute("CREATE TABLE IF NOT EXISTS tbl_keys (...)")
+```
+
+The correct order makes existing data authoritative and turns ambiguous
+legacy/target coexistence into an explicit recovery error.
 
 ---
 
@@ -145,7 +225,7 @@ Partial update: omitting/empty `api_key` keeps the previous secret (`test_partia
 
 ## Naming Conventions
 
-- Tables: plural lowercase (`keys`, `settings`).
+- Tables: plural lowercase with the `tbl_` prefix (`tbl_keys`, `tbl_settings`, `tbl_users`, `tbl_sessions`).
 - Columns: `snake_case`.
 - Flags in `keys`: integers `0`/`1`.
 - Flags in `settings`: strings `"0"`/`"1"`.

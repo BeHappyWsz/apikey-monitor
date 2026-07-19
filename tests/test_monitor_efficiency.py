@@ -58,7 +58,7 @@ class ListRevisionTests(unittest.TestCase):
             db.update_status(kid, "up", 1, "")
             # force last_check_at via direct SQL for deterministic order
             with db.connection(write=True) as conn:
-                conn.execute("UPDATE keys SET last_check_at=? WHERE id=?", (now - 1000 + i, kid))
+                conn.execute("UPDATE tbl_keys SET last_check_at=? WHERE id=?", (now - 1000 + i, kid))
             ids.append(kid)
         due = db.get_due_keys(now, up_interval=60, down_interval=30, limit=2)
         self.assertEqual(len(due), 2)

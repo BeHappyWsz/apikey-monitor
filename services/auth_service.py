@@ -105,6 +105,8 @@ class AuthService:
         if not user or not verified:
             self._record_failed_attempt(username, source_ip)
             raise AuthError("invalid_login", "用户名或密码错误", 401)
+        if not user.get("enabled", True):
+            raise AuthError("account_disabled", "该账号已被禁用，请联系管理员", 403)
         self._clear_attempts(username, source_ip)
         if self._hasher.check_needs_rehash(candidate_hash):
             db.update_user_password_hash(user["id"], self._hasher.hash(str(password)))
@@ -120,6 +122,9 @@ class AuthService:
         digest = self._token_hash(token)
         session = db.get_session(digest)
         if not session:
+            return None
+        if not session.get("enabled", True):
+            db.delete_session(digest)
             return None
         if int(session["expires_at"]) <= int(time.time()):
             db.delete_session(digest)
@@ -139,6 +144,19 @@ class AuthService:
             raise AuthError("username_taken", "用户名已存在", 409)
         user_id = db.create_user(username, self._hasher.hash(password))
         return db.get_user(user_id)
+
+    def set_user_enabled(self, actor_user_id, user_id, enabled):
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            raise AuthError("user_not_found", "用户不存在", 404)
+        enabled = bool(enabled)
+        if user_id == int(actor_user_id) and not enabled:
+            raise AuthError("cannot_disable_self", "不能禁用当前登录账号", 400)
+        user = db.set_user_enabled(user_id, enabled)
+        if not user:
+            raise AuthError("user_not_found", "用户不存在", 404)
+        return user
 
     def change_password(self, user_id, old_password, new_password):
         user = db.get_user_by_username(db.get_user(user_id)["username"])

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -288,6 +289,102 @@ class DbTests(unittest.TestCase):
         pub = db.public_key(entry)
         self.assertEqual(pub.get("check_path"), "/custom/health")
         self.assertNotIn("api_key", pub)
+
+    def test_legacy_tables_migrate_without_losing_data(self):
+        legacy_path = os.path.join(self.temp.name, "legacy.db")
+        conn = sqlite3.connect(legacy_path)
+        try:
+            conn.executescript("""
+            CREATE TABLE keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT DEFAULT '', base_url TEXT NOT NULL,
+                api_key TEXT NOT NULL, supports_anthropic INTEGER DEFAULT 0,
+                supports_openai INTEGER DEFAULT 0, models TEXT DEFAULT '[]', status TEXT DEFAULT 'unknown',
+                latency_ms INTEGER, last_check_at INTEGER, last_error TEXT DEFAULT '',
+                monitor_enabled INTEGER DEFAULT 1, interval_sec INTEGER, notes TEXT DEFAULT '',
+                created_at INTEGER, check_model TEXT DEFAULT '', model_status TEXT DEFAULT 'unknown',
+                model_latency_ms INTEGER, model_last_check_at INTEGER, model_last_error TEXT DEFAULT '',
+                sort_order INTEGER DEFAULT 0, check_path TEXT DEFAULT ''
+            );
+            CREATE TABLE settings (k TEXT PRIMARY KEY, v TEXT);
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL, must_change_password INTEGER DEFAULT 0, created_at INTEGER NOT NULL
+            );
+            CREATE TABLE sessions (
+                token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                csrf_token TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL
+            );
+            CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
+            """)
+            conn.execute("INSERT INTO keys(id,name,base_url,api_key,models,sort_order) VALUES(?,?,?,?,?,?)",
+                         (7, "legacy", "https://legacy.example", "sk-legacy", '["model-a"]', -10))
+            conn.execute("INSERT INTO settings(k,v) VALUES(?,?)", ("custom", "preserved"))
+            conn.execute("INSERT INTO users(id,username,password_hash,created_at) VALUES(?,?,?,?)",
+                         (4, "legacy-admin", "$argon2id$legacy", 100))
+            conn.execute("INSERT INTO sessions(token_hash,user_id,csrf_token,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?,?)",
+                         ("legacy-token", 4, "csrf", 100, 200, 100))
+            conn.commit()
+        finally:
+            conn.close()
+        previous_path = db.DB_PATH
+        try:
+            db.DB_PATH = legacy_path
+            db.init_db()
+            with db.connection() as conn:
+                tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                foreign_keys = conn.execute("PRAGMA foreign_key_list(tbl_sessions)").fetchall()
+            self.assertTrue({"tbl_keys", "tbl_settings", "tbl_users", "tbl_sessions"} <= tables)
+            self.assertFalse({"keys", "settings", "users", "sessions"} & tables)
+            self.assertEqual(db.get_key(7)["api_key"], "sk-legacy")
+            self.assertEqual(db.get_key(7)["models"], ["model-a"])
+            self.assertEqual(db.get_all_settings()["custom"], "preserved")
+            with db.connection() as check_conn:
+                legacy_setting = check_conn.execute(
+                    "SELECT name FROM tbl_settings WHERE k='custom'").fetchone()
+            self.assertEqual(legacy_setting["name"], "自定义设置：custom")
+            self.assertEqual(db.get_session("legacy-token")["username"], "legacy-admin")
+            self.assertEqual(foreign_keys[0][2], "tbl_users")
+            db.init_db()
+            self.assertEqual(db.get_key(7)["name"], "legacy")
+        finally:
+            db.DB_PATH = previous_path
+
+    def test_settings_name_metadata_is_backfilled_and_not_returned_by_settings_api(self):
+        db.set_settings({
+            "webdav_server": "https://dav.example.test/",
+            "_webdav_password": "not-exposed",
+            "custom_setting": "value",
+        })
+        with db.connection() as conn:
+            rows = {row["k"]: row["name"] for row in conn.execute(
+                "SELECT k,name FROM tbl_settings WHERE k IN (?,?,?)",
+                ("webdav_server", "_webdav_password", "custom_setting"))}
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(tbl_settings)")}
+        self.assertEqual(columns, {"k", "v", "name"})
+        self.assertEqual(rows, {
+            "webdav_server": "WebDAV 服务器地址",
+            "_webdav_password": "WebDAV 应用密码",
+            "custom_setting": "自定义设置：custom_setting",
+        })
+        self.assertEqual(db.get_all_settings()["webdav_server"], "https://dav.example.test/")
+        self.assertNotIn("name", db.get_public_settings())
+
+    def test_table_name_collision_stops_initialization(self):
+        collision_path = os.path.join(self.temp.name, "collision.db")
+        conn = sqlite3.connect(collision_path)
+        try:
+            conn.execute("CREATE TABLE keys (id INTEGER PRIMARY KEY)")
+            conn.execute("CREATE TABLE tbl_keys (id INTEGER PRIMARY KEY)")
+            conn.commit()
+        finally:
+            conn.close()
+        previous_path = db.DB_PATH
+        try:
+            db.DB_PATH = collision_path
+            with self.assertRaisesRegex(RuntimeError, "both legacy and tbl_\\* tables exist"):
+                db.init_db()
+        finally:
+            db.DB_PATH = previous_path
 
 if __name__ == "__main__":
     unittest.main()
