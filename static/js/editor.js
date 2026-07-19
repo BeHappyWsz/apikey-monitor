@@ -1,11 +1,11 @@
-import { $, esc, copyText, toast } from "./utils.js";
+import { $, esc, copyText, toast, withBusyButton } from "./utils.js";
 
 export function initEditor({ api, state, load, openModal, closeModal }) {
-  $("#btn-save-edit").addEventListener("click", () => saveEdit(false));
-  $("#btn-save-check-edit").addEventListener("click", () => saveEdit(true));
-  $("#btn-toggle-key").addEventListener("click", () => toggleRevealKey());
-  $("#btn-copy-base").addEventListener("click", () => copyText($("#edit-base-url").value, "Base URL"));
-  $("#btn-copy-key").addEventListener("click", () => copySecretKey());
+  $("#btn-save-edit").addEventListener("click", () => withBusyButton($("#btn-save-edit"), () => saveEdit(false), { busyLabel: "保存中…" }));
+  $("#btn-save-check-edit").addEventListener("click", () => withBusyButton($("#btn-save-check-edit"), () => saveEdit(true), { busyLabel: "保存并检测…" }));
+  $("#btn-toggle-key").addEventListener("click", () => withBusyButton($("#btn-toggle-key"), () => toggleRevealKey(), { busyLabel: "" }));
+  $("#btn-copy-base").addEventListener("click", () => withBusyButton($("#btn-copy-base"), () => copyText($("#edit-base-url").value, "Base URL"), { busyLabel: "复制中…" }));
+  $("#btn-copy-key").addEventListener("click", () => withBusyButton($("#btn-copy-key"), () => copySecretKey(), { busyLabel: "复制中…" }));
   $("#model-list").addEventListener("click", async (event) => {
     const button = event.target.closest(".js-set-check-model");
     if (!button) return;
@@ -13,10 +13,10 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
     closeModal("modal-models");
     await load();
   });
-  $("#btn-copy-models").addEventListener("click", () => {
+  $("#btn-copy-models").addEventListener("click", () => withBusyButton($("#btn-copy-models"), () => {
     const key = state.keys.find((value) => value.id === state.modelId);
     copyText((key?.models || []).join("\n"), "模型列表");
-  });
+  }, { busyLabel: "复制中…" }));
 
   // Ctrl/Cmd+Enter -> save and check
   $("#modal-edit")?.addEventListener("keydown", (event) => {

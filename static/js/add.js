@@ -1,4 +1,4 @@
-import { $, toast, formatCheckSummary } from "./utils.js";
+import { $, toast, formatCheckSummary, withBusyButton } from "./utils.js";
 
 export function initAdd({ api, load, openModal, closeModal }) {
   const open = () => {
@@ -12,13 +12,13 @@ export function initAdd({ api, load, openModal, closeModal }) {
     setTimeout(() => $("#add-base-url").focus(), 0);
   };
 
-  $("#btn-add")?.addEventListener("click", open);
-  $("#btn-empty-add")?.addEventListener("click", open);
-  $("#btn-toggle-add-key")?.addEventListener("click", () => {
+  $("#btn-add")?.addEventListener("click", () => withBusyButton($("#btn-add"), open, { busyLabel: "打开中…" }));
+  $("#btn-empty-add")?.addEventListener("click", () => withBusyButton($("#btn-empty-add"), open, { busyLabel: "打开中…" }));
+  $("#btn-toggle-add-key")?.addEventListener("click", () => withBusyButton($("#btn-toggle-add-key"), () => {
     $("#add-api-key").type = $("#add-api-key").type === "password" ? "text" : "password";
-  });
-  $("#btn-save-add")?.addEventListener("click", () => save(false));
-  $("#btn-save-check-add")?.addEventListener("click", () => save(true));
+  }, { busyLabel: "" }));
+  $("#btn-save-add")?.addEventListener("click", () => withBusyButton($("#btn-save-add"), () => save(false), { busyLabel: "保存中…" }));
+  $("#btn-save-check-add")?.addEventListener("click", () => withBusyButton($("#btn-save-check-add"), () => save(true), { busyLabel: "保存并检测…" }));
 
   // Ctrl/Cmd+Enter -> save and check
   $("#modal-add")?.addEventListener("keydown", (event) => {

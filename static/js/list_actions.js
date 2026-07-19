@@ -1,5 +1,5 @@
 import { canReorder, getVisibleKeys, keysFingerprint, moveKey, selectionSummary } from "./state.js";
-import { $, $$, copyText, esc, formatCheckSummary, toast } from "./utils.js";
+import { $, $$, copyText, esc, formatCheckSummary, toast, withBusyButton, confirmAction } from "./utils.js";
 import { openModal } from "./dialogs.js";
 
 export function initListActions({
@@ -24,15 +24,17 @@ export function initListActions({
     openModal("modal-models");
   }
 
-  async function deleteOne(key) {
-    if (!confirm(`确认删除“${key.name || key.base_url}”？`)) return;
-    await api("DELETE", `/api/keys/${key.id}`);
-    state.selected.delete(key.id);
-    toast("已删除");
-    await load();
+  async function deleteOne(key, triggerBtn) {
+    if (!await confirmAction(`确认删除"${key.name || key.base_url}"？`, { okLabel: "删除", danger: true })) return;
+    await withBusyButton(triggerBtn, async () => {
+      await api("DELETE", `/api/keys/${key.id}`);
+      state.selected.delete(key.id);
+      toast("已删除");
+      await load();
+    }, { busyLabel: "删除中…" });
   }
 
-  async function checkOne(key, modelOnly) {
+  async function checkOne(key, modelOnly, triggerBtn) {
     if (modelOnly && !key.check_model) {
       toast("请先设置验证模型，严格验证会产生一次最小模型调用");
       return editor.openEdit(key);
@@ -53,20 +55,23 @@ export function initListActions({
     const id = Number(cardEl?.dataset.id);
     const key = state.keys.find((value) => value.id === id);
     if (!key) return;
-    if (event.target.closest(".js-copy-url")) return copyText(key.base_url, "Base URL");
+    if (event.target.closest(".js-copy-url")) return withBusyButton(event.target.closest(".js-copy-url"), () => copyText(key.base_url, "Base URL"), { busyLabel: "复制中…" });
     if (event.target.closest(".js-copy-key")) {
-      try {
-        const secret = await api("GET", `/api/keys/${id}/secret`);
-        if (!secret.api_key) return toast("当前没有可复制的 API Key");
-        return copyText(secret.api_key, "API Key");
-      } catch { return; }
+      const trigger = event.target.closest(".js-copy-key");
+      return withBusyButton(trigger, async () => {
+        try {
+          const secret = await api("GET", `/api/keys/${id}/secret`);
+          if (!secret.api_key) return toast("当前没有可复制的 API Key");
+          return copyText(secret.api_key, "API Key");
+        } catch { return; }
+      }, { busyLabel: "复制中…" });
     }
     if (event.target.closest(".js-edit")) return editor.openEdit(key);
     if (event.target.closest(".js-models")) return openModels(key);
     if (event.target.closest(".js-export")) return exportUi.openSingleExport(key);
-    if (event.target.closest(".js-del")) return deleteOne(key);
+    if (event.target.closest(".js-del")) return deleteOne(key, event.target.closest(".js-del"));
     if (event.target.closest(".js-check") || event.target.closest(".js-check-model")) {
-      return checkOne(key, Boolean(event.target.closest(".js-check-model")));
+      return checkOne(key, Boolean(event.target.closest(".js-check-model")), event.target.closest(".js-check, .js-check-model"));
     }
   });
 
@@ -129,23 +134,23 @@ export function initListActions({
 
   $("#key-list").addEventListener("dragend", clearDragState);
 
-  $("#btn-check").addEventListener("click", async () => {
+  $("#btn-check").addEventListener("click", () => withBusyButton($("#btn-check"), async () => {
     if (!state.selected.size) return toast("请先选择要检测的项目");
     taskController.startTask(await api("POST", "/api/keys/batch_check", { ids: [...state.selected] }));
-  });
-  $("#btn-check-mobile").addEventListener("click", () => $("#btn-check").click());
-  $("#btn-delete-mobile").addEventListener("click", () => $("#btn-delete").click());
-  $("#btn-delete").addEventListener("click", async () => {
+  }, { busyLabel: "启动中…" }));
+  $("#btn-check-mobile").addEventListener("click", () => withBusyButton($("#btn-check-mobile"), () => $("#btn-check").click(), { busyLabel: "启动中…" }));
+  $("#btn-delete-mobile").addEventListener("click", () => withBusyButton($("#btn-delete-mobile"), () => $("#btn-delete").click(), { busyLabel: "删除中…" }));
+  $("#btn-delete").addEventListener("click", () => withBusyButton($("#btn-delete"), async () => {
     exportUi.closeMoreMenu();
     const rows = getVisibleKeys(state.keys, state.status, state.query);
     const summary = selectionSummary(state.selected, rows);
     if (!summary.total) return toast("请先选择要删除的项目");
-    if (!confirm(`确认删除 ${summary.total} 条？${summary.hidden ? `其中 ${summary.hidden} 条当前不可见。` : ""}`)) return;
+    if (!await confirmAction(`确认删除 ${summary.total} 条？${summary.hidden ? `其中 ${summary.hidden} 条当前不可见。` : ""}`, { okLabel: "删除", danger: true })) return;
     const result = await api("POST", "/api/keys/batch_delete", { ids: [...state.selected] });
     state.selected.clear();
     toast(`已删除 ${result.deleted} 条`);
     await load();
-  });
+  }, { busyLabel: "删除中…" }));
 
   return { checkOne, deleteOne, openModels };
 }

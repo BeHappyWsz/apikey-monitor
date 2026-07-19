@@ -12,6 +12,15 @@ import { initExportUi } from "./js/export_ui.js";
 import { initListActions } from "./js/list_actions.js";
 import { $, toast } from "./js/utils.js";
 import { initAuth } from "./js/auth.js";
+import { LoadingBar, BusyOverlay } from "./js/feedback.js";
+
+// Mount the global top progress bar so every api() request becomes
+// visible. id="toast" is unused now — the feedback module owns the toast
+// stack.
+LoadingBar();
+
+// Region-level overlays used during list refresh / import parse / sync.
+const listBusy = BusyOverlay(document.getElementById("key-list"), { text: "正在刷新…" });
 
 const state = {
   keys: [], selected: new Set(), status: "all", query: "", loading: true, loadError: "",
@@ -23,15 +32,11 @@ const state = {
 };
 
 async function api(method, path, body, options) {
-  try {
-    return (await request(method, path, body, options)).payload;
-  } catch (error) {
-    if (error.name !== "AbortError") toast(error.message || "请求失败", 4200);
-    throw error;
-  }
+  // Toast + in-flight bar are handled by api.js itself; pass silent for
+  // background polls so they don't spam toasts.
+  return (await request(method, path, body, { ...options, silent: options?.silent || false })).payload;
 }
 
-// listUi assigned after createListUi; load closes over listUi methods via getters below.
 const listUi = {};
 
 function pagePath(cursor = "") {
@@ -46,6 +51,7 @@ async function load({ silent = false, append = false } = {}) {
   if (!silent && !append) {
     state.loading = true;
     state.loadError = "";
+    listBusy(true);
     listUi.render();
   }
   if (append) state.pageLoading = true;
@@ -53,7 +59,7 @@ async function load({ silent = false, append = false } = {}) {
     // Polling only reports a new revision; it must not jump a scrolled list.
     if (silent && !state.checking.size) {
       try {
-        const revResult = await request("GET", "/api/keys/revision", undefined, { latest: true });
+        const revResult = await request("GET", "/api/keys/revision", undefined, { latest: true, silent: true });
         if (!revResult.isLatest()) return;
         const rev = String(revResult.payload?.revision || "");
         if (rev && rev === state.revision) return;
@@ -83,6 +89,7 @@ async function load({ silent = false, append = false } = {}) {
     listUi.render();
   } finally {
     state.pageLoading = false;
+    listBusy(false);
   }
 }
 

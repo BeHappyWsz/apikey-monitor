@@ -57,9 +57,9 @@
           <button class="more-item" id="btn-export-selected" type="button" role="menuitem" disabled title="请先勾选要导出的项目">⇫ 导出选中</button>
           <button class="more-item" id="btn-backup-all" type="button" role="menuitem" title="导出全部为 JSON 备份" disabled>💾 备份全部</button>
           <button class="more-item danger" id="btn-delete" type="button" role="menuitem" disabled title="请先勾选要删除的项目">🗑 批量删除</button>
-          <button class="more-item" id="btn-refresh" type="button" role="menuitem">↻ 刷新</button>
         </div>
       </div>
+      <button class="btn" id="btn-refresh" type="button" title="刷新列表">↻ 刷新</button>
       <label class="select-all"><input type="checkbox" id="sel-all"> 全选</label>
     </div>
     <div class="toolbar-filters">
@@ -108,7 +108,7 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-import">
   <div class="modal-card wide">
     <div class="modal-head">
-      <h2>粘贴导入</h2>
+      <h2><span class="modal-icon" aria-hidden="true">⇪</span>粘贴导入</h2>
       <button class="x" data-close>✕</button>
     </div>
     <p class="hint">支持：环境变量、<code>curl</code>、一行 <code>URL + Key</code>，以及本工具导出的 <strong>JSON 备份</strong>（数组或单条对象）。点「解析预览」后可在表格中改名称 / URL / Key / 检测模型。</p>
@@ -129,7 +129,6 @@
       </table>
     </div>
     <div class="modal-foot">
-      <button class="btn ghost" data-close>取消</button>
       <button class="btn primary" id="btn-save-cand">批量入库（自动判别）</button>
     </div>
   </div>
@@ -139,12 +138,11 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-system-settings">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>系统设置</h2>
+      <h2><span class="modal-icon" aria-hidden="true">⚙</span>系统设置</h2>
       <button class="x" data-close>✕</button>
     </div>
     <div class="form">
       <div class="form-section system-section">
-        <div class="section-title"><span class="section-mark">SYS</span>系统设置</div>
         <label><span>监听地址</span>
           <select id="set-host">
             <option value="127.0.0.1">127.0.0.1（仅本机）</option>
@@ -159,7 +157,6 @@
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn ghost pill" data-close>取消</button>
       <button class="btn primary pill" id="btn-save-system-settings">保存系统设置</button>
     </div>
   </div>
@@ -169,25 +166,22 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-monitor-settings">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>监测设置</h2>
+      <h2><span class="modal-icon" aria-hidden="true">◌</span>监测设置</h2>
       <button class="x" data-close>✕</button>
     </div>
     <div class="form">
       <div class="form-section monitor-section">
-        <div class="section-title"><span class="section-mark">MON</span>监测设置</div>
-      <label><span>启用定时监测</span>
-        <select id="set-enabled"><option value="1">开启</option><option value="0">关闭</option></select>
-      </label>
+        <div class="seg-row"><span class="seg-row-label">启用定时监测</span><div class="seg-group" role="group" aria-label="启用定时监测">
+        <button type="button" class="seg" id="set-enabled-on" data-value="1">开启</button>
+        <button type="button" class="seg" id="set-enabled-off" data-value="0">关闭</button>
+      </div></div>
       <label><span>检测间隔（秒）</span><input type="number" id="set-interval" min="30"></label>
       <label><span>离线复检间隔（秒）</span><input type="number" id="set-down" min="30"></label>
       <label><span>并发数</span><input type="number" id="set-conc" min="1" max="32"></label>
       <label><span>请求超时（秒，建议≥45）</span><input type="number" id="set-timeout" min="3" title="慢或推理型网关建议 ≥45 秒；设置过低会让可用端点在真实生成完成前超时，从而被误判为「不支持」"></label>
       <label><span>列表刷新间隔（秒，0=关闭）</span><input type="number" id="set-ui-refresh" min="0" max="3600" step="1" title="0关闭定时刷新；否则 3–3600 秒"></label>
       </div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn ghost pill" data-close>取消</button>
-      <button class="btn primary pill" id="btn-save-monitor-settings">保存监测设置</button>
+      <p class="hint monitor-auto-save" id="monitor-save-status" aria-live="polite"></p>
     </div>
   </div>
 </div>
@@ -197,7 +191,7 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-add">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>手动添加 Key</h2>
+      <h2><span class="modal-icon" aria-hidden="true">＋</span>手动添加 Key</h2>
       <button class="x" data-close>✕</button>
     </div>
     <div class="form">
@@ -215,7 +209,6 @@
       </label>
     </div>
     <div class="modal-foot">
-      <button class="btn ghost" data-close>取消</button>
       <button class="btn ghost" id="btn-save-add">仅保存</button>
       <button class="btn primary" id="btn-save-check-add">保存并检测</button>
     </div>
@@ -226,7 +219,7 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-edit">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>编辑 Key</h2>
+      <h2><span class="modal-icon" aria-hidden="true">✎</span>编辑 Key</h2>
       <button class="x" data-close>✕</button>
     </div>
     <div class="form">
@@ -258,7 +251,6 @@
       <label><span>单条检测间隔（秒，留空使用全局设置）</span><input type="number" id="edit-interval" min="30"></label>
     </div>
     <div class="modal-foot">
-      <button class="btn ghost" data-close>取消</button>
       <button class="btn ghost" id="btn-save-edit">仅保存</button>
       <button class="btn primary" id="btn-save-check-edit">保存并检测</button>
     </div>
@@ -269,14 +261,13 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-task">
   <div class="modal-card compact">
     <div class="modal-head">
-      <h2 id="task-title">任务进度</h2>
+      <h2><span class="modal-icon" aria-hidden="true">⟳</span><span id="task-title">任务进度</span></h2>
       <button class="x" data-close>✕</button>
     </div>
     <div class="progress-track"><div id="task-progress-bar"></div></div>
     <p id="task-message" class="hint"></p>
     <div class="modal-foot" id="task-foot" hidden>
       <button class="btn soft" id="btn-task-problems" type="button">只看问题项</button>
-      <button class="btn primary" type="button" data-close>关闭</button>
     </div>
   </div>
 </div>
@@ -284,7 +275,7 @@
 <!-- 服务重启弹窗 -->
 <div class="modal" role="dialog" aria-modal="true" id="modal-restart">
   <div class="modal-card">
-    <div class="modal-head"><h2>服务切换进度</h2></div>
+    <div class="modal-head"><h2><span class="modal-icon" aria-hidden="true">↻</span>服务切换进度</h2></div>
     <p id="restart-state">准备重启…</p>
     <ol class="restart-steps" id="restart-steps"></ol>
   </div>
@@ -294,14 +285,13 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-models">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>模型列表</h2>
+      <h2><span class="modal-icon" aria-hidden="true">☷</span>模型列表</h2>
       <button class="x" data-close>✕</button>
     </div>
     <div class="model-summary" id="model-summary"></div>
     <div class="model-list" id="model-list"></div>
     <div class="modal-foot">
       <button class="btn" id="btn-copy-models">复制全部</button>
-      <button class="btn ghost" data-close>关闭</button>
     </div>
   </div>
 </div>
@@ -310,7 +300,7 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-export">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>导出配置</h2>
+      <h2><span class="modal-icon" aria-hidden="true">⇫</span>导出配置</h2>
       <button class="x" data-close>✕</button>
     </div>
     <div class="export-toolbar">
@@ -333,12 +323,11 @@
 <div class="modal" role="dialog" aria-modal="true" id="modal-sync">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>云同步（WebDAV）</h2>
+      <h2><span class="modal-icon" aria-hidden="true">☁</span>云同步（WebDAV）</h2>
       <button class="x" data-close>✕</button>
     </div>
     <div class="form">
       <div class="form-section">
-        <div class="section-title"><span class="section-mark">DAV</span>WebDAV 设置</div>
         <label><span>服务器</span><input type="url" id="sync-server" placeholder="https://dav.jianguoyun.com/dav/"></label>
         <label><span>用户名</span><input type="text" id="sync-username" placeholder="登录邮箱"></label>
         <label><span>密码（应用密码）</span>
@@ -359,9 +348,6 @@
         <button class="btn danger" id="btn-sync-download-replace" type="button">⇩ 下载替换</button>
       </div>
       <p class="hint" id="sync-status">未同步。</p>
-    </div>
-    <div class="modal-foot">
-      <button class="btn ghost pill" data-close>关闭</button>
     </div>
   </div>
 </div>
@@ -389,7 +375,7 @@
 
 <div class="modal" role="dialog" aria-modal="true" id="modal-user-manage">
   <div class="modal-card">
-    <div class="modal-head"><h2>用户管理</h2><button class="x" type="button" data-close>×</button></div>
+    <div class="modal-head"><h2><span class="modal-icon" aria-hidden="true">◉</span>用户管理</h2><button class="x" type="button" data-close>×</button></div>
     <p class="hint">所有用户均为管理员。禁用账号会立即撤销其登录会话，恢复启用后可重新登录。</p>
     <div class="user-list" id="user-list" aria-live="polite"></div>
     <p class="error-text" id="user-list-error"></p>
@@ -402,15 +388,10 @@
 
 <div class="modal" role="dialog" aria-modal="true" id="modal-user-create">
   <form class="modal-card" id="user-create-form">
-    <div class="modal-head"><h2>新增管理员</h2><button class="x" type="button" data-close>×</button></div>
+    <div class="modal-head"><h2><span class="modal-icon" aria-hidden="true">＋</span>新增管理员</h2><button class="x" type="button" data-close>×</button></div>
     <div class="form">
       <label><span>用户名</span><input id="new-username" autocomplete="username" required></label>
-      <label><span>密码</span>
-        <div class="input-line password-line">
-          <input id="new-password" type="password" autocomplete="new-password" minlength="12" required>
-          <button class="icon-btn" id="btn-toggle-new-password" type="button" aria-label="显示密码" aria-pressed="false">显示</button>
-        </div>
-      </label>
+      <label><span>密码</span><div class="password-field"><input id="new-password" type="password" autocomplete="new-password" minlength="12" required><button class="password-toggle" type="button" id="btn-toggle-new-password" aria-label="显示密码" aria-pressed="false">显示</button></div></label>
       <p class="hint">所有用户均拥有管理员权限。密码至少 12 个字符。</p>
       <p class="error-text" id="user-create-error"></p>
     </div>
@@ -420,7 +401,7 @@
 
 <div class="modal" role="dialog" aria-modal="true" id="modal-password-change">
   <form class="modal-card" id="password-change-form">
-    <div class="modal-head"><h2>请修改初始密码</h2></div>
+    <div class="modal-head"><h2><span class="modal-icon" aria-hidden="true">⚿</span>请修改初始密码</h2></div>
     <div class="form">
       <label><span>当前密码</span><div class="password-field"><input id="current-password" type="password" autocomplete="current-password" required><button class="password-toggle" type="button" data-password-toggle="current-password" aria-label="显示密码" aria-pressed="false">显示</button></div></label>
       <label><span>新密码</span><div class="password-field"><input id="replacement-password" type="password" autocomplete="new-password" minlength="12" required><button class="password-toggle" type="button" data-password-toggle="replacement-password" aria-label="显示密码" aria-pressed="false">显示</button></div></label>
@@ -431,7 +412,6 @@
   </form>
 </div>
 
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="/static/app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import { $, toast, withBusyButton } from "./utils.js";
+import { $, toast, withBusyButton, confirmAction } from "./utils.js";
 
 export function initSync({ api, load, openModal }) {
   function toggleHttpWarn() {
@@ -39,19 +39,19 @@ export function initSync({ api, load, openModal }) {
     openModal("modal-sync");
     await fillConfig();
     await refreshStatus();
-  }));
+  }, { busyLabel: "打开中…" }));
 
   $("#sync-server").addEventListener("input", toggleHttpWarn);
-  $("#btn-sync-save").addEventListener("click", async () => {
+  $("#btn-sync-save").addEventListener("click", () => withBusyButton($("#btn-sync-save"), async () => {
     try {
       await api("POST", "/api/sync/config", collect());
       await fillConfig();
       toast("WebDAV 设置已保存");
     } catch { /* surfaced */ }
-  });
+  }, { busyLabel: "保存中…" }));
 
   // Persist current fields first, then probe — guarantees the test uses what the user typed.
-  $("#btn-sync-test").addEventListener("click", async () => {
+  $("#btn-sync-test").addEventListener("click", () => withBusyButton($("#btn-sync-test"), async () => {
     try {
       await api("POST", "/api/sync/config", collect());
       const result = await api("POST", "/api/sync/test", {});
@@ -59,17 +59,17 @@ export function initSync({ api, load, openModal }) {
       if (result.last_modified) parts.push(`更新于 ${result.last_modified}`);
       toast("连接成功：" + parts.join(" · "), 4200);
     } catch { /* surfaced */ }
-  });
+  }, { busyLabel: "测试中…" }));
 
-  $("#btn-sync-upload").addEventListener("click", async () => {
+  $("#btn-sync-upload").addEventListener("click", () => withBusyButton($("#btn-sync-upload"), async () => {
     try {
       const result = await api("POST", "/api/sync/upload", {});
       toast(`已上传 ${result.count} 条到云端` + (result.remote_modified ? `（${result.remote_modified}）` : ""));
       refreshStatus();
     } catch { /* surfaced */ }
-  });
+  }, { busyLabel: "上传中…" }));
 
-  $("#btn-sync-download-merge").addEventListener("click", async () => {
+  $("#btn-sync-download-merge").addEventListener("click", () => withBusyButton($("#btn-sync-download-merge"), async () => {
     try {
       const result = await api("POST", "/api/sync/download", { mode: "merge" });
       const parts = [`新增 ${result.count} 条`];
@@ -78,16 +78,16 @@ export function initSync({ api, load, openModal }) {
       await load();
       refreshStatus();
     } catch { /* surfaced */ }
-  });
+  }, { busyLabel: "下载中…" }));
 
   // Destructive: confirm in UI (a local snapshot is taken server-side before replacing).
-  $("#btn-sync-download-replace").addEventListener("click", async () => {
-    if (!confirm("全量替换将以云端为准覆盖本机全部 Key（替换前会自动本地备份一份）。确认继续？")) return;
+  $("#btn-sync-download-replace").addEventListener("click", () => withBusyButton($("#btn-sync-download-replace"), async () => {
+    if (!await confirmAction("全量替换将以云端为准覆盖本机全部 Key（替换前会自动本地备份一份）。确认继续？", { okLabel: "替换", danger: true })) return;
     try {
       const result = await api("POST", "/api/sync/download", { mode: "replace" });
       toast(`已替换为云端 ${result.count} 条` + (result.backup_path ? "，本地备份已保存" : ""), 3600);
       await load();
       refreshStatus();
     } catch { /* surfaced */ }
-  });
+  }, { busyLabel: "下载中…" }));
 }

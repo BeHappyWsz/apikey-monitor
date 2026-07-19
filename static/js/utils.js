@@ -1,3 +1,13 @@
+// utils.js — small helpers shared across modules.
+//
+// `withBusyButton` and `toast` are upgraded to use the global feedback
+// layer so every interactive surface gets loading state and toast
+// notifications consistently.
+
+import { setButtonBusy, toast as fbToast, confirmAction as fbConfirmAction } from "./feedback.js";
+
+export { fbConfirmAction as confirmAction };
+
 export const $ = (selector, root = document) => root.querySelector(selector);
 export const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -16,34 +26,40 @@ export function esc(value) {
   }[char]));
 }
 
+/**
+ * Global toast — delegates to feedback.js so notifications stack in the
+ * top-right corner instead of fading from the bottom of the page.
+ */
 export function toast(message, timeout = 2600) {
-  const el = $("#toast");
-  el.textContent = message;
-  el.classList.add("show");
-  clearTimeout(el._timer);
-  el._timer = setTimeout(() => el.classList.remove("show"), timeout);
+  fbToast(message, timeout);
 }
 
 /**
- * Run a user-triggered action once while making its button unavailable.
- * Keeping the original label avoids layout shifts in compact toolbars.
+ * Wrap a button click so the button shows a loading state for the
+ * duration of `action`. If the button has no async work to do (just opens
+ * a modal), the state clears as soon as the synchronous handler returns.
+ *
+ * Visually: the button is disabled, aria-busy="true" is set, and a spinner
+ * is prepended to the existing label. When the action finishes (success
+ * or error), the button returns to its idle state.
+ *
+ * Guarded against re-entrancy: a click while busy is silently ignored.
  */
-export async function withBusyButton(button, action) {
-  if (!button || button.disabled) return undefined;
-  button.disabled = true;
-  button.setAttribute("aria-busy", "true");
+export async function withBusyButton(button, action, { busyLabel } = {}) {
+  if (!button || button.disabled || button.getAttribute("aria-busy") === "true") return undefined;
+  if (busyLabel) button.dataset.fbBusyLabel = busyLabel;
+  setButtonBusy(button, true);
   try {
     return await action();
   } finally {
-    button.disabled = false;
-    button.removeAttribute("aria-busy");
+    setButtonBusy(button, false);
   }
 }
 
 export async function copyText(text, label = "内容") {
   try {
     await navigator.clipboard.writeText(text || "");
-    toast(`${label}已复制`);
+    toast(`已复制${label}`);
   } catch {
     toast("复制失败，请手动复制", 4200);
   }

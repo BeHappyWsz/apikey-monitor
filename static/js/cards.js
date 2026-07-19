@@ -26,7 +26,7 @@ export function renderCard(key, state) {
       </div>
     </header>
     <div class="card-body-grid">
-      <div class="metric primary-metric"><span>API Key</span><b class="key-mask-line"><span>${esc(key.api_key_masked || maskKey(key.api_key))}</span><button class="link-btn js-copy-key" type="button" title="复制完整 API Key">复制</button></b></div>
+      <div class="metric primary-metric"><span>API Key</span><b class="key-mask-line"><span class="masked-key">${esc(key.api_key_masked || maskKey(key.api_key))}</span><button class="link-btn js-copy-key" type="button" title="复制完整 API Key">复制</button></b></div>
       <div class="metric"><span>在线协议</span><b class="protocol-statuses">${protocols.length ? protocols.map(([name, protocolStatus]) => `<em class="protocol-state ${protocolStatus.replace(/_/g, "-")}">${name} · ${statusLabel[protocolStatus] || "未知"}</em>`).join("") : "未确认"}</b></div>
       <div class="metric wide-metric"><span>严格验证</span><b class="model-state ${modelTone}">${esc(key.check_model || "未设置")} · ${modelLabel}</b></div>
     </div>

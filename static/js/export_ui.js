@@ -1,4 +1,4 @@
-import { $, copyText, downloadText, exportFilename, toast } from "./utils.js";
+import { $, copyText, downloadText, exportFilename, toast, withBusyButton } from "./utils.js";
 
 const EXPORT_FMT_KEY = "apikeyconfig.exportFmt";
 const EXPORT_FMTS = ["claude", "codex", "env", "powershell", "json"];
@@ -105,12 +105,12 @@ export function initExportUi({ api, state, openModal }) {
   document.addEventListener("click", (event) => {
     if (!event.target.closest?.("#more-menu")) closeMoreMenu();
   });
-  $("#btn-backup-all")?.addEventListener("click", () => { backupAll().catch(() => {}); });
-  $("#btn-export-selected").addEventListener("click", () => { closeMoreMenu(); exportSelected(); });
-  $("#btn-export-mobile")?.addEventListener("click", () => $("#btn-export-selected").click());
+  $("#btn-backup-all")?.addEventListener("click", () => withBusyButton($("#btn-backup-all"), () => backupAll().catch(() => {}), { busyLabel: "备份中…" }));
+  $("#btn-export-selected").addEventListener("click", () => withBusyButton($("#btn-export-selected"), () => { closeMoreMenu(); exportSelected(); }, { busyLabel: "导出中…" }));
+  $("#btn-export-mobile")?.addEventListener("click", () => withBusyButton($("#btn-export-mobile"), () => $("#btn-export-selected").click(), { busyLabel: "导出中…" }));
   $("#exp-fmt").addEventListener("change", updateExport);
-  $("#btn-copy").addEventListener("click", () => copyText($("#exp-text").value, "配置"));
-  $("#btn-download")?.addEventListener("click", downloadCurrentExport);
+  $("#btn-copy").addEventListener("click", () => withBusyButton($("#btn-copy"), () => copyText($("#exp-text").value, "配置"), { busyLabel: "复制中…" }));
+  $("#btn-download")?.addEventListener("click", () => withBusyButton($("#btn-download"), downloadCurrentExport, { busyLabel: "下载中…" }));
 
   return {
     closeMoreMenu,

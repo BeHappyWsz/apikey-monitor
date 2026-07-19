@@ -40,6 +40,7 @@ Cross-layer: JSON shape changes require `docs/api.md` + backend validators + UI 
 | [State Management](./state-management.md) | In-memory state + pure selectors | Filled |
 | [Type Safety](./type-safety.md) | JS contracts without TypeScript | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | Checks, secrets in UI | Filled |
+| [Interaction Feedback](./interaction-feedback.md) | LoadingBar / BusyOverlay / withBusyButton / toast / confirmAction | Filled |
 
 ---
 

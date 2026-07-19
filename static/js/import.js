@@ -1,4 +1,4 @@
-import { $, esc, maskKey, toast, formatImportSummary } from "./utils.js";
+import { $, esc, maskKey, toast, formatImportSummary, withBusyButton } from "./utils.js";
 
 const SAMPLE_TEXT = `ANTHROPIC_BASE_URL=https://api.example.com
 ANTHROPIC_AUTH_TOKEN=sk-ant-example-key-please-replace
@@ -25,17 +25,17 @@ const SAMPLE_JSON = `[
 `;
 
 export function initImport({ api, state, load, openModal, closeModal, startTask }) {
-  $("#btn-import").addEventListener("click", () => openImport());
-  $("#btn-empty-import")?.addEventListener("click", () => openImport());
-  $("#btn-empty-json")?.addEventListener("click", () => openImport(SAMPLE_JSON.trim() + "\n", { jsonHint: true }));
-  $("#btn-fill-sample")?.addEventListener("click", () => {
+  $("#btn-import").addEventListener("click", () => withBusyButton($("#btn-import"), () => openImport(), { busyLabel: "打开中…" }));
+  $("#btn-empty-import")?.addEventListener("click", () => withBusyButton($("#btn-empty-import"), () => openImport(), { busyLabel: "打开中…" }));
+  $("#btn-empty-json")?.addEventListener("click", () => withBusyButton($("#btn-empty-json"), () => openImport(SAMPLE_JSON.trim() + "\n", { jsonHint: true }), { busyLabel: "恢复中…" }));
+  $("#btn-fill-sample")?.addEventListener("click", () => withBusyButton($("#btn-fill-sample"), () => {
     $("#paste-area").value = SAMPLE_TEXT;
     toast("已填入文本示例，可直接解析预览");
-  });
-  $("#btn-fill-json-sample")?.addEventListener("click", () => {
+  }, { busyLabel: "填充中…" }));
+  $("#btn-fill-json-sample")?.addEventListener("click", () => withBusyButton($("#btn-fill-json-sample"), () => {
     $("#paste-area").value = SAMPLE_JSON.trim() + "\n";
     toast("已填入 JSON 备份示例，可直接解析预览");
-  });
+  }, { busyLabel: "填充中…" }));
 
   async function parsePaste() {
     const text = $("#paste-area").value;
@@ -72,8 +72,8 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
     if (result.task) startTask(result.task);
   }
 
-  $("#btn-parse").addEventListener("click", () => parsePaste());
-  $("#btn-save-cand").addEventListener("click", () => saveCandidates());
+  $("#btn-parse").addEventListener("click", () => withBusyButton($("#btn-parse"), () => parsePaste(), { busyLabel: "解析中…" }));
+  $("#btn-save-cand").addEventListener("click", () => withBusyButton($("#btn-save-cand"), () => saveCandidates(), { busyLabel: "保存中…" }));
 
   // Ctrl/Cmd+Enter: parse when empty candidates, save when has candidates
   $("#modal-import")?.addEventListener("keydown", (event) => {
