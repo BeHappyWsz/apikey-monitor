@@ -767,6 +767,7 @@ table.cand { min-width:650px; }
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     padding: 11px 14px 14px 16px !important;
   }
+  .input-line.password-line { grid-template-columns: minmax(0, 1fr) auto !important; }
 }
 
 
@@ -952,6 +953,27 @@ table.cand { min-width:650px; }
 .auth-card p { color: var(--muted); }
 .auth-card label { display: grid; gap: 6px; color: var(--text); font-weight: 600; }
 .auth-card input { width: 100%; }
+
+/* Administrator user management */
+.user-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(45vh, 360px);
+  overflow-y: auto;
+  margin-top: 14px;
+}
+.user-list-item {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel2);
+}
+.user-list-item strong { overflow-wrap: anywhere; }
+.user-list-item span { color: var(--muted); font-size: 12px; }
+.password-line { grid-template-columns: minmax(0, 1fr) auto; }
+.password-line .icon-btn { width: auto; min-width: 52px; padding: 0 9px; font-size: 12px; }
 
 #task-foot {
   margin-top: 14px;

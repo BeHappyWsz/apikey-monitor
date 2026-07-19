@@ -16,7 +16,7 @@
     </div>
   </div>
   <div class="top-actions">
-    <button class="btn ghost" id="btn-user-manage">用户</button>
+    <button class="btn ghost" id="btn-user-manage">用户管理</button>
     <button class="btn ghost" id="btn-logout">退出 <span id="auth-user"></span></button>
     <button class="btn ghost" id="btn-system-settings">⚙ 系统设置</button>
     <button class="btn ghost" id="btn-monitor-settings">◌ 监测设置</button>
@@ -373,12 +373,30 @@
   </form>
 </section>
 
+<div class="modal" role="dialog" aria-modal="true" id="modal-user-manage">
+  <div class="modal-card">
+    <div class="modal-head"><h2>用户管理</h2><button class="x" type="button" data-close>×</button></div>
+    <p class="hint">所有用户均为管理员，可访问本系统中的 API Key 与设置。</p>
+    <div class="user-list" id="user-list" aria-live="polite"></div>
+    <p class="error-text" id="user-list-error"></p>
+    <div class="modal-foot">
+      <button class="btn ghost" id="btn-reload-users" type="button">刷新列表</button>
+      <button class="btn primary" id="btn-open-user-create" type="button">新增用户</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" role="dialog" aria-modal="true" id="modal-user-create">
   <form class="modal-card" id="user-create-form">
     <div class="modal-head"><h2>新增管理员</h2><button class="x" type="button" data-close>×</button></div>
     <div class="form">
       <label><span>用户名</span><input id="new-username" autocomplete="username" required></label>
-      <label><span>密码</span><input id="new-password" type="password" autocomplete="new-password" minlength="12" required></label>
+      <label><span>密码</span>
+        <div class="input-line password-line">
+          <input id="new-password" type="password" autocomplete="new-password" minlength="12" required>
+          <button class="icon-btn" id="btn-toggle-new-password" type="button" aria-label="显示密码" aria-pressed="false">显示</button>
+        </div>
+      </label>
       <p class="hint">所有用户均拥有管理员权限。密码至少 12 个字符。</p>
       <p class="error-text" id="user-create-error"></p>
     </div>
