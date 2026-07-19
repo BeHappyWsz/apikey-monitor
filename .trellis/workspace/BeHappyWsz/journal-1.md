@@ -130,3 +130,36 @@ Published v0.1.1: monitor efficiency, protocol-aware probes, single-instance res
 - Keep parked: `07-16-third-protocol-e2e`, `07-17-multi-device-webdav-sync` until explicitly unparked
 - Unreleased items remain under CHANGELOG Planned
 
+
+
+## Session 4: Archive Anthropic probe reliability task
+
+**Date**: 2026-07-19
+**Task**: Archive Anthropic probe reliability task
+**Branch**: `main`
+
+### Summary
+
+Re-ran the complete 92-test suite successfully, then archived 07-17-fix-anthropic-probe-reliability. The fix raises the default request timeout to 45 seconds, migrates legacy defaults, and retries transient Anthropic probe failures.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7174162` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
