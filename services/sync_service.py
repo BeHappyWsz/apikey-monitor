@@ -4,8 +4,8 @@
 Build/push/pull a JSON envelope (see ``core.export``) against a WebDAV server
 such as 坚果云. All operations are user-triggered; nothing syncs silently.
 
-Credentials live in the settings table. The password uses a ``_`` prefix so
-``SettingsService.get()`` never exposes it; sync reads it back from the DB
+Credentials live in the settings table. The password is explicitly marked
+non-public in ``db.get_public_settings()``; sync reads it back from the DB
 directly.
 """
 import os
@@ -20,13 +20,13 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_DIR = os.environ.get("APIKEYCONFIG_RUNTIME_DIR", os.path.join(ROOT_DIR, ".runtime"))
 BACKUP_DIR = os.path.join(RUNTIME_DIR, "backups")
 
-_WD_SERVER = "webdav_server"
-_WD_USERNAME = "webdav_username"
-_WD_REMOTE = "webdav_remote_path"
-_WD_PASSWORD = "_webdav_password"  # "_" prefix: excluded from config.json + masked API
-# Last-sync is runtime state. The "_" prefix keeps it out of the /api/settings
-# surface; /api/sync/status reads it back via get_all_settings().
-_WD_LAST = "_webdav_last_sync"
+_WD_SERVER = "webdavServer"
+_WD_USERNAME = "webdavUsername"
+_WD_REMOTE = "webdavRemotePath"
+_WD_PASSWORD = "webdavPassword"
+# Last-sync is runtime state and is explicitly excluded from /api/settings;
+# /api/sync/status reads it back via get_all_settings().
+_WD_LAST = "webdavLastSync"
 
 _SYNC_TIMEOUT = 30
 

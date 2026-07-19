@@ -443,23 +443,45 @@ class DbTests(unittest.TestCase):
 
     def test_settings_name_metadata_is_backfilled_and_not_returned_by_settings_api(self):
         db.set_settings({
-            "webdav_server": "https://dav.example.test/",
-            "_webdav_password": "not-exposed",
-            "custom_setting": "value",
+            "webdavServer": "https://dav.example.test/",
+            "webdavPassword": "not-exposed",
+            "customSetting": "value",
         })
         with db.connection() as conn:
             rows = {row["k"]: row["name"] for row in conn.execute(
                 "SELECT k,name FROM tbl_settings WHERE k IN (?,?,?)",
-                ("webdav_server", "_webdav_password", "custom_setting"))}
+                ("webdavServer", "webdavPassword", "customSetting"))}
             columns = {row[1] for row in conn.execute("PRAGMA table_info(tbl_settings)")}
         self.assertEqual(columns, {"k", "v", "name"})
         self.assertEqual(rows, {
-            "webdav_server": "WebDAV 服务器地址",
-            "_webdav_password": "WebDAV 应用密码",
-            "custom_setting": "自定义设置：custom_setting",
+            "webdavServer": "WebDAV 服务器地址",
+            "webdavPassword": "WebDAV 应用密码",
+            "customSetting": "自定义设置：customSetting",
         })
-        self.assertEqual(db.get_all_settings()["webdav_server"], "https://dav.example.test/")
+        self.assertEqual(db.get_all_settings()["webdavServer"], "https://dav.example.test/")
+        self.assertNotIn("webdavPassword", db.get_public_settings())
         self.assertNotIn("name", db.get_public_settings())
+
+    def test_legacy_private_setting_keys_migrate_to_camel_case(self):
+        with db.connection(write=True) as conn:
+            conn.executemany("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?)", [
+                ("_webdav_password", "legacy-secret", ""),
+                ("webdav_last_sync", "legacy-sync", ""),
+                ("custom_setting", "custom", ""),
+            ])
+        db.init_db()
+        values = db.get_all_settings()
+        self.assertEqual(values["webdavPassword"], "legacy-secret")
+        self.assertEqual(values["webdavLastSync"], "legacy-sync")
+        self.assertNotIn("_webdav_password", values)
+        self.assertNotIn("webdav_last_sync", values)
+        self.assertEqual(values["customSetting"], "custom")
+        self.assertNotIn("custom_setting", values)
+        self.assertNotIn("webdavPassword", db.get_public_settings())
+        self.assertNotIn("webdavLastSync", db.get_public_settings())
+        db.set_settings({"server_port": "9999"})
+        self.assertEqual(db.get_all_settings()["serverPort"], "9999")
+        self.assertNotIn("server_port", db.get_all_settings())
 
     def test_table_name_collision_stops_initialization(self):
         collision_path = os.path.join(self.temp.name, "collision.db")

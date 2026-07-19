@@ -32,8 +32,8 @@ def main(argv=None):
     db.init_db()
     AUTH.ensure_bootstrap()
     settings = db.get_all_settings()
-    host = args.host or settings.get("server_host", "127.0.0.1")
-    port = args.port or int(settings.get("server_port", 7878))
+    host = args.host or settings.get("serverHost", "127.0.0.1")
+    port = args.port or int(settings.get("serverPort", 7878))
     trust_proxy_headers = os.environ.get("APIKEYCONFIG_TRUST_PROXY", "") == "1"
     if host == "0.0.0.0" and not trust_proxy_headers:
         print("[apiKeyConfig] 网络监听需要由 HTTPS 反向代理保护，并设置 APIKEYCONFIG_TRUST_PROXY=1", file=sys.stderr)
@@ -47,7 +47,7 @@ def main(argv=None):
         raise SystemExit(1) from exc
 
     runtime = dict(settings)
-    runtime.update(server_host=host, server_port=str(port))
+    runtime.update(serverHost=host, serverPort=str(port))
     try:
         server = AppServer((host, port), Handler)
     except OSError as exc:

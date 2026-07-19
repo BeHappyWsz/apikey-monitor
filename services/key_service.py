@@ -32,7 +32,7 @@ class KeyService:
 
     def _probe(self, entry, health):
         settings = self._settings()
-        timeout = int(settings.get("request_timeout_sec", 45))
+        timeout = int(settings.get("requestTimeoutSec", 45))
         concurrency = int(settings.get("concurrency", 8))
         with TASKS.probe_slot(concurrency):
             if health:
@@ -100,7 +100,7 @@ class KeyService:
             with TASKS.probe_slot(int(settings.get("concurrency", 8))):
                 result = core.model_check(entry["base_url"], entry["api_key"], model,
                                           bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
-                                          int(settings.get("request_timeout_sec", 45)))
+                                          int(settings.get("requestTimeoutSec", 45)))
             db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"), result.get("model_error"))
             if model != entry.get("check_model"):
                 db.update_key(key_id, {"check_model": model})

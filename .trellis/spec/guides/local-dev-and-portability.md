@@ -106,7 +106,7 @@ When debugging restart on another machine, point these vars at a temp folder the
 | Ports | Integration tests bind free `127.0.0.1` ports; close leftover `python app.py` processes if health checks hang. |
 | Firewall | Binding `0.0.0.0` is allowed by validator but **not recommended**. For network deployment, use a TLS-terminating reverse proxy and the documented `APIKEYCONFIG_TRUST_PROXY=1` setting; do not rely on loopback assumptions. |
 
-Supported `server_host` values in validator: only `127.0.0.1`, `localhost`, `0.0.0.0`.
+Supported `serverHost` values in validator: only `127.0.0.1`, `localhost`, `0.0.0.0`.
 
 ---
 

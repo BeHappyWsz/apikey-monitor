@@ -61,14 +61,14 @@ def tick():
         _inflight = True
     try:
         settings = db.get_all_settings()
-        if settings.get("global_monitor_enabled") != "1":
+        if settings.get("globalMonitorEnabled") != "1":
             return
         concurrency = max(1, int(settings.get("concurrency", 8) or 8))
         max_per_tick = max(1, concurrency * _MAX_PER_TICK_FACTOR)
         due = db.get_due_keys(
             int(time.time()),
-            int(settings.get("global_interval_sec", 300)),
-            int(settings.get("down_recheck_interval_sec", 120)),
+            int(settings.get("globalIntervalSec", 300)),
+            int(settings.get("downRecheckIntervalSec", 120)),
             limit=max_per_tick,
         )
         if not due:

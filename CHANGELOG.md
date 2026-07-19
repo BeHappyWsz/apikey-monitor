@@ -21,6 +21,12 @@
 - WebDAV sync-boundary regression coverage: remote payloads and replacement
   operations contain only portable API-key fields, leaving local settings and
   administrator accounts intact.
+- WebDAV internal settings now use camelCase (`webdavPassword` and
+  `webdavLastSync`) instead of underscore-prefixed keys; existing databases
+  migrate the old rows automatically without exposing them through the public
+  settings API.
+- All `tbl_settings.k` values now use camelCase. Startup migrates existing
+  snake_case rows, and every settings write normalizes keys before persistence.
 
 ### Changed
 

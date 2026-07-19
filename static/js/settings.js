@@ -10,8 +10,8 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
     } catch {
       runtime = {
         status: "unknown",
-        host: settings.server_host,
-        port: settings.server_port,
+        host: settings.serverHost,
+        port: settings.serverPort,
         health_unavailable: true,
       };
     }
@@ -23,9 +23,9 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
   $("#btn-system-settings").addEventListener("click", () => withBusyButton($("#btn-system-settings"), async () => {
     try {
       const settings = await loadSettings();
-      $("#set-host").value = settings.server_host;
-      $("#set-port").value = settings.server_port;
-      $("#lan-warning").hidden = settings.server_host !== "0.0.0.0";
+      $("#set-host").value = settings.serverHost;
+      $("#set-port").value = settings.serverPort;
+      $("#lan-warning").hidden = settings.serverHost !== "0.0.0.0";
       openModal("modal-system-settings");
     } catch {
       // api() has already shown the actionable server error.
@@ -35,12 +35,12 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
   $("#btn-monitor-settings").addEventListener("click", () => withBusyButton($("#btn-monitor-settings"), async () => {
     try {
       const settings = await loadSettings();
-      $("#set-enabled").value = settings.global_monitor_enabled;
-      $("#set-interval").value = settings.global_interval_sec;
-      $("#set-down").value = settings.down_recheck_interval_sec;
+      $("#set-enabled").value = settings.globalMonitorEnabled;
+      $("#set-interval").value = settings.globalIntervalSec;
+      $("#set-down").value = settings.downRecheckIntervalSec;
       $("#set-conc").value = settings.concurrency;
-      $("#set-timeout").value = settings.request_timeout_sec;
-      $("#set-ui-refresh").value = settings.ui_refresh_interval_sec ?? 15;
+      $("#set-timeout").value = settings.requestTimeoutSec;
+      $("#set-ui-refresh").value = settings.uiRefreshIntervalSec ?? 15;
       openModal("modal-monitor-settings");
     } catch {
       // api() has already shown the actionable server error.
@@ -56,12 +56,12 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
   $("#btn-save-monitor-settings").addEventListener("click", async () => {
     const payload = {
       ...state.settings,
-      global_monitor_enabled: $("#set-enabled").value,
-      global_interval_sec: $("#set-interval").value,
-      down_recheck_interval_sec: $("#set-down").value,
+      globalMonitorEnabled: $("#set-enabled").value,
+      globalIntervalSec: $("#set-interval").value,
+      downRecheckIntervalSec: $("#set-down").value,
       concurrency: $("#set-conc").value,
-      request_timeout_sec: $("#set-timeout").value,
-      ui_refresh_interval_sec: $("#set-ui-refresh").value,
+      requestTimeoutSec: $("#set-timeout").value,
+      uiRefreshIntervalSec: $("#set-ui-refresh").value,
     };
     const saved = await api("POST", "/api/settings", payload);
     state.settings = saved || payload;
@@ -74,10 +74,10 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
     const host = $("#set-host").value;
     const port = $("#set-port").value.trim();
     if (host === "0.0.0.0" && !confirm("确认将监听地址设为 0.0.0.0？局域网内其他设备可访问本管理页面，且当前未启用访问密码。请只在可信网络使用。")) return;
-    await api("POST", "/api/settings", { ...state.settings, server_host: host, server_port: port });
+    await api("POST", "/api/settings", { ...state.settings, serverHost: host, serverPort: port });
     closeModal("modal-system-settings");
-    const runtimeHost = state.runtime.host || state.settings.server_host;
-    const runtimePort = state.runtime.port ?? state.settings.server_port;
+    const runtimeHost = state.runtime.host || state.settings.serverHost;
+    const runtimePort = state.runtime.port ?? state.settings.serverPort;
     if (runtimeHost === host && String(runtimePort) === String(port)) return toast("系统设置已保存，无需重启");
     if (!confirm("将关闭旧端口并切换到新端口；若失败会自动恢复旧端口。确认立即重启？")) {
       return toast("设置已保存，可稍后重新打开系统设置执行重启");

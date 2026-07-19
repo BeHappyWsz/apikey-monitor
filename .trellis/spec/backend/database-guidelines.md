@@ -68,15 +68,15 @@ Known keys (defaults in `_FALLBACK_DEFAULTS`):
 
 | Key | Default | Bounds (validator) |
 |-----|---------|---------------------|
-| `server_host` | `127.0.0.1` | only `127.0.0.1`, `localhost`, `0.0.0.0` |
-| `server_port` | `7878` | 1024?65535 |
-| `global_monitor_enabled` | `1` | `"0"` / `"1"` |
-| `global_interval_sec` | `300` | 30?86400 |
-| `down_recheck_interval_sec` | `120` | 30?86400 |
+| `serverHost` | `127.0.0.1` | only `127.0.0.1`, `localhost`, `0.0.0.0` |
+| `serverPort` | `7878` | 1024?65535 |
+| `globalMonitorEnabled` | `1` | `"0"` / `"1"` |
+| `globalIntervalSec` | `300` | 30?86400 |
+| `downRecheckIntervalSec` | `120` | 30?86400 |
 | `concurrency` | `8` | 1?32 |
-| `request_timeout_sec` | `15` | 3?120 |
-| `auto_classify_on_add` | `1` | stored; **not applied by KeyService yet** (see services-runtime) |
-| `ui_refresh_interval_sec` | `15` | 0 or 3?3600 |
+| `requestTimeoutSec` | `45` | 3?120 |
+| `autoClassifyOnAdd` | `1` | stored; **not applied by KeyService yet** (see services-runtime) |
+| `uiRefreshIntervalSec` | `15` | 0 or 3?3600 |
 
 ---
 
@@ -287,6 +287,14 @@ orchestration. Neither function writes `config.json`.
 new store once, while startup-only private keys (prefixed `_`) configure the
 storage backend and bootstrap behavior. Keep real credentials out of the
 tracked file; use environment overrides or an untracked `APIKEYCONFIG_CONFIG_PATH`.
+
+`tbl_settings.k` is independent of the private `config.json` convention: all
+persisted keys use camelCase. `_migrate_setting_keys()` upgrades existing
+snake_case or underscore-prefixed rows before normal service reads, preserving
+the new key if both forms already exist. `set_settings()` and
+`replace_settings()` normalize every incoming key, so a new runtime write
+cannot reintroduce snake_case. `webdavPassword` and `webdavLastSync` remain
+explicitly excluded by `get_public_settings()`.
 
 ---
 

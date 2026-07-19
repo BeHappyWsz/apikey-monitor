@@ -96,7 +96,7 @@ Do **not** store API keys in `localStorage` / `sessionStorage`.
 4. `preserveUi` path captures open `<details>`, scroll, focus around append
    renders.
 
-UI poll interval: `settings.ui_refresh_interval_sec` (`0` disables). After mutations, call `load()` (non-silent as appropriate).
+UI poll interval: `settings.uiRefreshIntervalSec` (`0` disables). After mutations, call `load()` (non-silent as appropriate).
 
 ---
 

@@ -418,15 +418,15 @@ Content-Type: application/json
 
 ```json
 {
-  "server_host": "127.0.0.1",
-  "server_port": "7878",
-  "global_monitor_enabled": "1",
-  "global_interval_sec": "300",
-  "down_recheck_interval_sec": "120",
+  "serverHost": "127.0.0.1",
+  "serverPort": "7878",
+  "globalMonitorEnabled": "1",
+  "globalIntervalSec": "300",
+  "downRecheckIntervalSec": "120",
   "concurrency": "8",
-  "request_timeout_sec": "15",
-  "auto_classify_on_add": "1",
-  "ui_refresh_interval_sec": "5"
+  "requestTimeoutSec": "45",
+  "autoClassifyOnAdd": "1",
+  "uiRefreshIntervalSec": "5"
 }
 ```
 

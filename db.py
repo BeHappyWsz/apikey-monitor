@@ -14,28 +14,32 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("APIKEYCONFIG_DB_PATH", os.path.join(BASE_DIR, "data.db"))
 CONFIG_PATH = os.environ.get("APIKEYCONFIG_CONFIG_PATH", os.path.join(BASE_DIR, "config.json"))
 _FALLBACK_DEFAULTS = {
-    "server_host": "127.0.0.1", "server_port": "7878",
-    "global_monitor_enabled": "1", "global_interval_sec": "300",
-    "down_recheck_interval_sec": "120", "concurrency": "8",
-    "request_timeout_sec": "45", "auto_classify_on_add": "1",
-    "ui_refresh_interval_sec": "15",
+    "serverHost": "127.0.0.1", "serverPort": "7878",
+    "globalMonitorEnabled": "1", "globalIntervalSec": "300",
+    "downRecheckIntervalSec": "120", "concurrency": "8",
+    "requestTimeoutSec": "45", "autoClassifyOnAdd": "1",
+    "uiRefreshIntervalSec": "15",
 }
 _SETTING_NAMES = {
-    "server_host": "服务监听地址",
-    "server_port": "服务监听端口",
-    "global_monitor_enabled": "全局监测开关",
-    "global_interval_sec": "正常 Key 监测间隔（秒）",
-    "down_recheck_interval_sec": "异常 Key 复检间隔（秒）",
+    "serverHost": "服务监听地址",
+    "serverPort": "服务监听端口",
+    "globalMonitorEnabled": "全局监测开关",
+    "globalIntervalSec": "正常 Key 监测间隔（秒）",
+    "downRecheckIntervalSec": "异常 Key 复检间隔（秒）",
     "concurrency": "监测并发数",
-    "request_timeout_sec": "探测请求超时（秒）",
-    "auto_classify_on_add": "新增 Key 自动识别开关",
-    "ui_refresh_interval_sec": "前端列表刷新间隔（秒）",
-    "webdav_server": "WebDAV 服务器地址",
-    "webdav_username": "WebDAV 用户名",
-    "webdav_remote_path": "WebDAV 远程备份路径",
-    "_webdav_password": "WebDAV 应用密码",
-    "_webdav_last_sync": "WebDAV 最近同步状态",
+    "requestTimeoutSec": "探测请求超时（秒）",
+    "autoClassifyOnAdd": "新增 Key 自动识别开关",
+    "uiRefreshIntervalSec": "前端列表刷新间隔（秒）",
+    "webdavServer": "WebDAV 服务器地址",
+    "webdavUsername": "WebDAV 用户名",
+    "webdavRemotePath": "WebDAV 远程备份路径",
+    "webdavPassword": "WebDAV 应用密码",
+    "webdavLastSync": "WebDAV 最近同步状态",
 }
+
+# Settings stored in tbl_settings use descriptive names. Browser visibility is
+# an explicit policy, never a side effect of a leading underscore.
+_NON_PUBLIC_SETTING_KEYS = frozenset(("webdavPassword", "webdavLastSync"))
 
 
 _list_generation = 0
@@ -51,6 +55,15 @@ _TABLE_RENAMES = (
     ("users", "tbl_users"),
     ("sessions", "tbl_sessions"),
 )
+
+
+def _camel_case_setting_key(key):
+    """Return the persisted camelCase form for a tbl_settings key."""
+    raw = str(key or "")
+    parts = [part for part in raw.strip("_").split("_") if part]
+    if not parts:
+        return raw
+    return parts[0] + "".join(part[:1].upper() + part[1:] for part in parts[1:])
 
 
 def _private_config():
@@ -251,7 +264,8 @@ def _load_defaults():
         return dict(_FALLBACK_DEFAULTS)
     out = dict(_FALLBACK_DEFAULTS)
     if isinstance(data, dict):
-        out.update({key: str(value) for key, value in data.items() if not key.startswith("_")})
+        out.update({_camel_case_setting_key(key): str(value)
+                    for key, value in data.items() if not key.startswith("_")})
     return out
 
 
@@ -317,12 +331,12 @@ def _migrate(conn):
     settings_cols = {row[1] for row in conn.execute("PRAGMA table_info(tbl_settings)")}
     if "name" not in settings_cols:
         conn.execute("ALTER TABLE tbl_settings ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+    _migrate_setting_keys(conn)
     _backfill_setting_names(conn)
-    conn.execute("PRAGMA user_version=10")
-    conn.execute("DELETE FROM tbl_settings WHERE k = 'webdav_last_sync'")
-    _to_row = conn.execute("SELECT v FROM tbl_settings WHERE k='request_timeout_sec'").fetchone()
+    conn.execute("PRAGMA user_version=12")
+    _to_row = conn.execute("SELECT v FROM tbl_settings WHERE k='requestTimeoutSec'").fetchone()
     if _to_row and str(_to_row["v"]) == "15":
-        conn.execute("UPDATE tbl_settings SET v='45' WHERE k='request_timeout_sec'")
+        conn.execute("UPDATE tbl_settings SET v='45' WHERE k='requestTimeoutSec'")
     user_cols = {row[1] for row in conn.execute("PRAGMA table_info(tbl_users)")}
     if "must_change_password" not in user_cols:
         conn.execute("ALTER TABLE tbl_users ADD COLUMN must_change_password INTEGER DEFAULT 0")
@@ -341,8 +355,23 @@ def _backfill_setting_names(conn):
                      [(_setting_name(row["k"]), row["k"]) for row in rows])
 
 
+def _migrate_setting_keys(conn):
+    """Normalize every persisted key; pre-existing camelCase rows win conflicts."""
+    keys = {row["k"] for row in conn.execute("SELECT k FROM tbl_settings").fetchall()}
+    for old_key in tuple(keys):
+        new_key = _camel_case_setting_key(old_key)
+        if new_key == old_key:
+            continue
+        if new_key in keys:
+            conn.execute("DELETE FROM tbl_settings WHERE k=?", (old_key,))
+        else:
+            conn.execute("UPDATE tbl_settings SET k=? WHERE k=?", (new_key, old_key))
+            keys.add(new_key)
+
+
 def _setting_rows(items):
-    return [(key, str(value), _setting_name(key)) for key, value in items.items()]
+    normalized = {_camel_case_setting_key(key): str(value) for key, value in items.items()}
+    return [(key, value, _setting_name(key)) for key, value in normalized.items()]
 
 
 def _sqlite_table_names(conn):
@@ -458,6 +487,7 @@ def _init_mysql():
             "WHERE table_schema=DATABASE() AND table_name='tbl_settings'")}
         if "name" not in settings_columns:
             conn.execute("ALTER TABLE tbl_settings ADD COLUMN name VARCHAR(255) NOT NULL DEFAULT ''")
+        _migrate_setting_keys(conn)
         _backfill_setting_names(conn)
         if conn.execute("SELECT 1 FROM tbl_settings LIMIT 1").fetchone() is None:
             conn.executemany("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?)", _setting_rows(_load_defaults()))
@@ -474,7 +504,7 @@ def get_public_settings():
     if cached is not None:
         return cached
     values = {key: value for key, value in get_all_settings().items()
-              if not key.startswith("_")}
+              if key not in _NON_PUBLIC_SETTING_KEYS and not key.startswith("_")}
     _cache_set(_PUBLIC_SETTINGS_CACHE_KEY, values)
     return values
 
@@ -482,7 +512,7 @@ def get_public_settings():
 def set_settings(items):
     """Upsert settings rows. Runtime writes stay in the DB only — config.json
     is a read-only seed and is never rewritten."""
-    normalized = {key: str(value) for key, value in items.items()}
+    normalized = {_camel_case_setting_key(key): str(value) for key, value in items.items()}
     with connection(write=True) as conn:
         for key, value, name in _setting_rows(normalized):
             if storage_backend() == "mysql":
@@ -898,8 +928,8 @@ def monitor_next_check_at(entry, status, settings, checked_at=None):
     on the same future second.
     """
     checked_at = int(time.time() if checked_at is None else checked_at)
-    global_interval = max(30, int(settings.get("global_interval_sec", 300) or 300))
-    down_interval = max(30, int(settings.get("down_recheck_interval_sec", 120) or 120))
+    global_interval = max(30, int(settings.get("globalIntervalSec", 300) or 300))
+    down_interval = max(30, int(settings.get("downRecheckIntervalSec", 120) or 120))
     interval = int(entry.get("interval_sec") or global_interval)
     if not entry.get("interval_sec") and status == "down":
         interval = down_interval

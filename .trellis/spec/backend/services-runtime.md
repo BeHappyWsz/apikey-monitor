@@ -46,7 +46,7 @@ HTTP must not reimplement lease/check logic; call these services from `api/route
 
 ### Settings flag caveat
 
-`auto_classify_on_add` is stored in settings / docs but **is not read by KeyService today**. Post-add detection is controlled by request field **`check_after_save`** (see `static/js/add.js`). If you wire the setting, do it deliberately in service/UI and add tests ? do not assume it already works.
+`autoClassifyOnAdd` is stored in settings / docs but **is not read by KeyService today**. Post-add detection is controlled by request field **`check_after_save`** (see `static/js/add.js`). If you wire the setting, do it deliberately in service/UI and add tests ? do not assume it already works.
 
 ---
 
@@ -67,7 +67,7 @@ Concurrency for batch comes from settings `concurrency` (1?32).
 `monitor.py`:
 
 1. Thread name `monitor`, tick interval `_TICK = 10` seconds.
-2. If `global_monitor_enabled != "1"`, return.
+2. If `globalMonitorEnabled != "1"`, return.
 3. `db.get_due_keys(now, ..., limit=concurrency * 2)` uses the indexed
    persisted `next_check_at` schedule; it must not read every enabled key.
 4. `KEYS.batch_check(ids, health=True)`.
@@ -76,8 +76,8 @@ Tick exceptions are printed and must not kill the thread.
 
 Each protocol result persists a new `next_check_at`:
 
-- normal/unknown: per-key interval or `global_interval_sec`;
-- down with no per-key interval: `down_recheck_interval_sec`;
+- normal/unknown: per-key interval or `globalIntervalSec`;
+- down with no per-key interval: `downRecheckIntervalSec`;
 - degraded: at least 10 minutes; rate-limited: at least 15 minutes;
   auth error: at least 6 hours;
 - deterministic ±5% jitter prevents a bulk import or restart from synchronizing
@@ -114,12 +114,12 @@ From `api/validators.py` unless noted:
 | Import parse body | 2 MiB |
 | Batch items / ids | 1000 |
 | `interval_sec` (per key) | 30?86400 or null |
-| `global_interval_sec` / `down_recheck_interval_sec` | 30?86400 |
+| `globalIntervalSec` / `downRecheckIntervalSec` | 30?86400 |
 | `concurrency` | 1?32 |
-| `request_timeout_sec` | 3?120 |
-| `ui_refresh_interval_sec` | 0 or 3?3600 (0 = off) |
-| `server_port` | 1024?65535 |
-| `server_host` | `127.0.0.1` / `localhost` / `0.0.0.0` |
+| `requestTimeoutSec` | 3?120 |
+| `uiRefreshIntervalSec` | 0 or 3?3600 (0 = off) |
+| `serverPort` | 1024?65535 |
+| `serverHost` | `127.0.0.1` / `localhost` / `0.0.0.0` |
 | Probe response read | `core.MAX_RESPONSE_BYTES` = 1 MiB |
 | Task error message clip | ~180 chars |
 | Task errors list | max 10 entries |
@@ -132,4 +132,4 @@ From `api/validators.py` unless noted:
 - Holding a DB write transaction across `core.classify` network I/O.
 - Persisting batch tasks in SQLite without a product decision (current design is memory-only).
 - Calling `core.classify` from the frontend (browser cannot safely hold bulk secrets for server-side probes ? server already has the key).
-- Documenting `auto_classify_on_add` as effective without implementing the read path.
+- Documenting `autoClassifyOnAdd` as effective without implementing the read path.

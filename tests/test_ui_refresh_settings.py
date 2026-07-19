@@ -1,5 +1,5 @@
 ﻿# -*- coding: utf-8 -*-
-"""Quick unit checks for ui_refresh_interval_sec."""
+"""Quick unit checks for uiRefreshIntervalSec."""
 import unittest
 from api import validators
 
@@ -7,21 +7,21 @@ from api import validators
 class UiRefreshSettingsTest(unittest.TestCase):
     def test_default_and_valid(self):
         out = validators.settings_payload({})
-        self.assertEqual(out["ui_refresh_interval_sec"], "15")
-        out = validators.settings_payload({"ui_refresh_interval_sec": "0"})
-        self.assertEqual(out["ui_refresh_interval_sec"], "0")
-        out = validators.settings_payload({"ui_refresh_interval_sec": "30"})
-        self.assertEqual(out["ui_refresh_interval_sec"], "30")
+        self.assertEqual(out["uiRefreshIntervalSec"], "15")
+        out = validators.settings_payload({"uiRefreshIntervalSec": "0"})
+        self.assertEqual(out["uiRefreshIntervalSec"], "0")
+        out = validators.settings_payload({"uiRefreshIntervalSec": "30"})
+        self.assertEqual(out["uiRefreshIntervalSec"], "30")
 
     def test_rejects_too_small_nonzero(self):
         with self.assertRaises(ValueError):
-            validators.settings_payload({"ui_refresh_interval_sec": "1"})
+            validators.settings_payload({"uiRefreshIntervalSec": "1"})
         with self.assertRaises(ValueError):
-            validators.settings_payload({"ui_refresh_interval_sec": "2"})
+            validators.settings_payload({"uiRefreshIntervalSec": "2"})
 
     def test_rejects_too_large(self):
         with self.assertRaises(ValueError):
-            validators.settings_payload({"ui_refresh_interval_sec": "3601"})
+            validators.settings_payload({"uiRefreshIntervalSec": "3601"})
 
 
 if __name__ == "__main__":

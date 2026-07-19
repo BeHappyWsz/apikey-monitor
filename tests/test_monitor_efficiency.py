@@ -68,7 +68,7 @@ class ListRevisionTests(unittest.TestCase):
 
     def test_next_check_schedule_applies_backoff_and_jitter(self):
         entry = {"id": 7, "interval_sec": None}
-        settings = {"global_interval_sec": "300", "down_recheck_interval_sec": "120"}
+        settings = {"globalIntervalSec": "300", "downRecheckIntervalSec": "120"}
         now = 10000
         up = db.monitor_next_check_at(entry, "up", settings, now)
         down = db.monitor_next_check_at(entry, "down", settings, now)
@@ -111,9 +111,9 @@ class MonitorTickGuardTests(unittest.TestCase):
 
         due = [{"id": i} for i in range(1, 20)]
         with patch("db.get_all_settings", return_value={
-            "global_monitor_enabled": "1",
-            "global_interval_sec": "300",
-            "down_recheck_interval_sec": "120",
+            "globalMonitorEnabled": "1",
+            "globalIntervalSec": "300",
+            "downRecheckIntervalSec": "120",
             "concurrency": "3",
         }), patch("db.get_due_keys", return_value=due) as gdue, \
              patch.object(monitor.KEYS, "batch_check", side_effect=fake_batch), \

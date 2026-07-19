@@ -76,8 +76,8 @@ def route(method, path, query, body, server, request=None):
         return 200, {
             "status": "ok",
             "pid": __import__("os").getpid(),
-            "host": server.runtime_settings["server_host"],
-            "port": int(server.runtime_settings["server_port"]),
+            "host": server.runtime_settings["serverHost"],
+            "port": int(server.runtime_settings["serverPort"]),
             "name": APP_NAME,
             "version": __version__,
         }

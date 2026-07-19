@@ -213,20 +213,20 @@ class SettingsMaskingTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_password_masked_in_settings_get(self):
-        db.set_settings({"webdav_server": "https://dav.example.com/dav/",
-                         "webdav_username": "me", "webdav_remote_path": "/k/b.json",
-                         "_webdav_password": "super-secret"})
+        db.set_settings({"webdavServer": "https://dav.example.com/dav/",
+                         "webdavUsername": "me", "webdavRemotePath": "/k/b.json",
+                         "webdavPassword": "super-secret"})
         exposed = SETTINGS.get()
-        self.assertNotIn("_webdav_password", exposed)
+        self.assertNotIn("webdavPassword", exposed)
         self.assertNotIn("super-secret", str(exposed))
-        self.assertEqual(exposed["webdav_server"], "https://dav.example.com/dav/")
+        self.assertEqual(exposed["webdavServer"], "https://dav.example.com/dav/")
 
     def test_runtime_never_writes_config_json(self):
         # config.json is a read-only seed; runtime mutations stay in the DB
         # only, so secrets never reach config.json (the file is not even created).
-        db.set_settings({"_webdav_password": "super-secret", "server_port": "9999"})
-        self.assertEqual(db.get_all_settings().get("_webdav_password"), "super-secret")
-        self.assertEqual(db.get_all_settings().get("server_port"), "9999")
+        db.set_settings({"webdavPassword": "super-secret", "serverPort": "9999"})
+        self.assertEqual(db.get_all_settings().get("webdavPassword"), "super-secret")
+        self.assertEqual(db.get_all_settings().get("serverPort"), "9999")
         self.assertFalse(os.path.exists(db.CONFIG_PATH))
 
 

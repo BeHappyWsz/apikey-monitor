@@ -69,7 +69,7 @@ Partial PUT: omit `api_key` or send empty to keep existing secret. `base_url` is
 
 All values become strings in DB. Validator output keys:
 
-`server_host`, `server_port`, `global_monitor_enabled`, `global_interval_sec`, `down_recheck_interval_sec`, `concurrency`, `request_timeout_sec`, `auto_classify_on_add`, `ui_refresh_interval_sec`.
+`serverHost`, `serverPort`, `globalMonitorEnabled`, `globalIntervalSec`, `downRecheckIntervalSec`, `concurrency`, `requestTimeoutSec`, `autoClassifyOnAdd`, `uiRefreshIntervalSec`.
 
 Hosts limited to `127.0.0.1` / `localhost` / `0.0.0.0`. See backend services-runtime for numeric bounds.
 

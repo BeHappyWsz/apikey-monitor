@@ -157,7 +157,7 @@ function applyUiRefreshInterval(sec) {
 }
 
 function applyUiRefreshFromSettings(settings) {
-  const sec = settings?.ui_refresh_interval_sec ?? 15;
+  const sec = settings?.uiRefreshIntervalSec ?? 15;
   applyUiRefreshInterval(sec);
 }
 

@@ -63,7 +63,7 @@ def _normalize_ui_refresh(value, default=15):
     if number is None:
         number = default
     if number != 0 and number < 3:
-        raise ValueError("ui_refresh_interval_sec must be 0 or at least 3")
+        raise ValueError("uiRefreshIntervalSec must be 0 or at least 3")
     return number
 
 
@@ -71,19 +71,19 @@ def settings_payload(data, current=None):
     if not isinstance(data, dict):
         raise ValueError("json object required")
     current = current or {}
-    host = str(data.get("server_host", current.get("server_host", "127.0.0.1"))).strip()
+    host = str(data.get("serverHost", current.get("serverHost", "127.0.0.1"))).strip()
     if host not in ("127.0.0.1", "localhost", "0.0.0.0"):
-        raise ValueError("unsupported server_host")
+        raise ValueError("unsupported serverHost")
     return {
-        "server_host": host,
-        "server_port": str(normalize_int(data.get("server_port", current.get("server_port", 7878)), 7878, 1024, 65535)),
-        "global_monitor_enabled": "1" if str(data.get("global_monitor_enabled", current.get("global_monitor_enabled", "1"))).lower() in ("1", "true") else "0",
-        "global_interval_sec": str(normalize_int(data.get("global_interval_sec", current.get("global_interval_sec", 300)), 300, 30, 86400)),
-        "down_recheck_interval_sec": str(normalize_int(data.get("down_recheck_interval_sec", current.get("down_recheck_interval_sec", 120)), 120, 30, 86400)),
+        "serverHost": host,
+        "serverPort": str(normalize_int(data.get("serverPort", current.get("serverPort", 7878)), 7878, 1024, 65535)),
+        "globalMonitorEnabled": "1" if str(data.get("globalMonitorEnabled", current.get("globalMonitorEnabled", "1"))).lower() in ("1", "true") else "0",
+        "globalIntervalSec": str(normalize_int(data.get("globalIntervalSec", current.get("globalIntervalSec", 300)), 300, 30, 86400)),
+        "downRecheckIntervalSec": str(normalize_int(data.get("downRecheckIntervalSec", current.get("downRecheckIntervalSec", 120)), 120, 30, 86400)),
         "concurrency": str(normalize_int(data.get("concurrency", current.get("concurrency", 8)), 8, 1, 32)),
-        "request_timeout_sec": str(normalize_int(data.get("request_timeout_sec", current.get("request_timeout_sec", 45)), 45, 3, 120)),
-        "auto_classify_on_add": "1" if str(data.get("auto_classify_on_add", current.get("auto_classify_on_add", "1"))).lower() in ("1", "true") else "0",
-        "ui_refresh_interval_sec": str(_normalize_ui_refresh(data.get("ui_refresh_interval_sec", current.get("ui_refresh_interval_sec", 15)))),
+        "requestTimeoutSec": str(normalize_int(data.get("requestTimeoutSec", current.get("requestTimeoutSec", 45)), 45, 3, 120)),
+        "autoClassifyOnAdd": "1" if str(data.get("autoClassifyOnAdd", current.get("autoClassifyOnAdd", "1"))).lower() in ("1", "true") else "0",
+        "uiRefreshIntervalSec": str(_normalize_ui_refresh(data.get("uiRefreshIntervalSec", current.get("uiRefreshIntervalSec", 15)))),
     }
 
 

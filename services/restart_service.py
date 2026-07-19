@@ -101,8 +101,8 @@ def get_status(restart_id):
 
 
 def request_restart(server, old_settings, target_settings):
-    old_host, old_port = old_settings["server_host"], int(old_settings["server_port"])
-    target_host, target_port = target_settings["server_host"], int(target_settings["server_port"])
+    old_host, old_port = old_settings["serverHost"], int(old_settings["serverPort"])
+    target_host, target_port = target_settings["serverHost"], int(target_settings["serverPort"])
     restart_id = uuid.uuid4().hex[:12]
     if (old_host, old_port) == (target_host, target_port):
         return set_status(restart_id, "no_change", "监听地址和端口未变化，无需重启",
@@ -194,8 +194,8 @@ def _wait_process_health(process, url, timeout):
 
 def _spawn(settings, restart_id, child_env=None):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    command = [sys.executable, os.path.join(root, "app.py"), "--host", settings["server_host"],
-               "--port", str(settings["server_port"]), "--no-browser", "--restart-id", restart_id]
+    command = [sys.executable, os.path.join(root, "app.py"), "--host", settings["serverHost"],
+               "--port", str(settings["serverPort"]), "--no-browser", "--restart-id", restart_id]
     kwargs = {"cwd": root, "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
               "stderr": subprocess.DEVNULL, "env": child_env}
     if os.name == "nt":
@@ -224,7 +224,7 @@ def helper_main(restart_id, old_settings, target_settings, old_pid):
     target_process = None
     try:
         set_status(restart_id, "waiting_old_port_release", "等待旧进程退出并确认旧端口已释放")
-        old_host, old_port = old_settings["server_host"], int(old_settings["server_port"])
+        old_host, old_port = old_settings["serverHost"], int(old_settings["serverPort"])
         if not _wait(lambda: not _pid_alive(old_pid), 15):
             raise RuntimeError("old process did not exit")
         if not _wait(lambda: can_bind(old_host, old_port), 10):
@@ -238,7 +238,7 @@ def helper_main(restart_id, old_settings, target_settings, old_pid):
         else:
             target_process = _spawn(target_settings, restart_id)
         set_status(restart_id, "verifying_target", "正在验证目标服务", target_pid=target_process.pid)
-        target_url = make_url(target_settings["server_host"], target_settings["server_port"])
+        target_url = make_url(target_settings["serverHost"], target_settings["serverPort"])
         if _wait_process_health(target_process, target_url, 20):
             set_status(restart_id, "succeeded", "新端口启动成功", target_pid=target_process.pid)
             return
@@ -258,7 +258,7 @@ def helper_main(restart_id, old_settings, target_settings, old_pid):
         try:
             db.replace_settings(old_settings)
             fallback = _spawn(old_settings, restart_id, _fallback_env())
-            old_url = make_url(old_settings["server_host"], old_settings["server_port"])
+            old_url = make_url(old_settings["serverHost"], old_settings["serverPort"])
             if _wait_process_health(fallback, old_url, 20):
                 set_status(restart_id, "rolled_back", f"重启异常，已恢复旧端口：{exc}", target_pid=fallback.pid)
                 return

@@ -22,7 +22,7 @@ class SettingsService:
         target = self.get()
         old = dict(server.runtime_settings)
         old.update({key: target.get(key, value) for key, value in old.items()
-                    if key not in ("server_host", "server_port")})
+                    if key not in ("serverHost", "serverPort")})
         return restart_service.request_restart(server, old, target)
 
 

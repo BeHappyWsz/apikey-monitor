@@ -169,10 +169,10 @@ class SyncServiceTests(_DBPatchedCase):
         self.state.data.clear()
         self.remote = "/apikey-monitor/backup.json"
         db.set_settings({
-            "webdav_server": self.base,
-            "webdav_username": "user",
-            "_webdav_password": "pass",
-            "webdav_remote_path": self.remote,
+            "webdavServer": self.base,
+            "webdavUsername": "user",
+            "webdavPassword": "pass",
+            "webdavRemotePath": self.remote,
         })
 
     def svc(self):
@@ -181,8 +181,8 @@ class SyncServiceTests(_DBPatchedCase):
     def test_get_config_unconfigured(self):
         # set_settings only upserts, so clear by overwriting with empties
         # (a fresh DB simply has these keys absent -> same "" defaults).
-        db.set_settings({"webdav_server": "", "webdav_username": "",
-                         "_webdav_password": "", "webdav_remote_path": ""})
+        db.set_settings({"webdavServer": "", "webdavUsername": "",
+                         "webdavPassword": "", "webdavRemotePath": ""})
         cfg = self.svc().get_config()
         self.assertFalse(cfg["configured"])
         self.assertFalse(cfg["has_password"])
@@ -196,8 +196,8 @@ class SyncServiceTests(_DBPatchedCase):
         self.assertTrue(cfg["has_password"])
         self.assertNotIn("password", cfg)
         self.assertNotIn("brand-new", json.dumps(cfg, ensure_ascii=False))
-        # The password is persisted under its "_" key and read back by the service.
-        self.assertEqual(db.get_all_settings().get("_webdav_password"), "brand-new")
+        # The password stays internal even though its stored key is camelCase.
+        self.assertEqual(db.get_all_settings().get("webdavPassword"), "brand-new")
 
     def test_save_config_empty_password_keeps_existing(self):
         svc = self.svc()
@@ -206,7 +206,7 @@ class SyncServiceTests(_DBPatchedCase):
         # User re-saves without retyping the password (common UI flow).
         svc.save_config({"server": self.base, "username": "user",
                          "remote_path": self.remote, "password": ""})
-        self.assertEqual(db.get_all_settings().get("_webdav_password"), "first")
+        self.assertEqual(db.get_all_settings().get("webdavPassword"), "first")
         self.assertTrue(self.svc().get_config()["configured"])
 
     def test_save_config_directory_remote_path_uses_backup_json(self):
@@ -215,7 +215,7 @@ class SyncServiceTests(_DBPatchedCase):
             "remote_path": "apikey-monitor", "password": "pass",
         })
         self.assertEqual(cfg["remote_path"], "apikey-monitor/backup.json")
-        self.assertEqual(db.get_all_settings().get("webdav_remote_path"), "apikey-monitor/backup.json")
+        self.assertEqual(db.get_all_settings().get("webdavRemotePath"), "apikey-monitor/backup.json")
 
     def test_save_config_json_remote_path_is_preserved(self):
         cfg = self.svc().save_config({
@@ -243,7 +243,7 @@ class SyncServiceTests(_DBPatchedCase):
 
     def test_sync_payload_and_replace_only_touch_api_keys(self):
         db.add_key({"name": "local", "base_url": "https://local.com", "api_key": "sk-local"})
-        db.set_settings({"custom_setting": "must-survive"})
+        db.set_settings({"customSetting": "must-survive"})
         user_id = db.create_user("operator", "hash", enabled=True)
         self.svc().upload()
         envelope = json.loads(self.state.data["/dav" + self.remote])
@@ -253,7 +253,7 @@ class SyncServiceTests(_DBPatchedCase):
             {"name": "remote", "base_url": "https://remote.com", "api_key": "sk-remote"},
         ], 1).encode("utf-8")
         self.svc().download("replace")
-        self.assertEqual(db.get_all_settings()["custom_setting"], "must-survive")
+        self.assertEqual(db.get_all_settings()["customSetting"], "must-survive")
         self.assertEqual(db.get_user(user_id)["username"], "operator")
 
     def test_download_merge_adds_without_removing(self):
@@ -332,8 +332,8 @@ class RouterSyncTests(_DBPatchedCase):
 
     def _creds(self, password="pass"):
         db.set_settings({
-            "webdav_server": self.base, "webdav_username": "user",
-            "_webdav_password": password, "webdav_remote_path": self.remote,
+            "webdavServer": self.base, "webdavUsername": "user",
+            "webdavPassword": password, "webdavRemotePath": self.remote,
         })
 
     def test_get_config_route_unconfigured(self):
@@ -401,9 +401,9 @@ class RouterSyncTests(_DBPatchedCase):
 
     def test_connection_error_maps_502_webdav_error(self):
         db.set_settings({
-            "webdav_server": f"http://127.0.0.1:{_dead_port()}/dav/",
-            "webdav_username": "u", "_webdav_password": "p",
-            "webdav_remote_path": "/x.json",
+            "webdavServer": f"http://127.0.0.1:{_dead_port()}/dav/",
+            "webdavUsername": "u", "webdavPassword": "p",
+            "webdavRemotePath": "/x.json",
         })
         with self.assertRaises(ApiError) as ctx:
             router.route("POST", "/api/sync/test", "", {}, None)

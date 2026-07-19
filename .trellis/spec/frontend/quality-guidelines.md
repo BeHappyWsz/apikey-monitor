@@ -83,7 +83,7 @@ Only non-secret preference currently persisted: export format key `apikeyconfig.
 | Mistake | Fix |
 |---------|-----|
 | Only browser happy path | Node tests for `state.js` helpers |
-| Hard-coded 5s refresh | Honor `ui_refresh_interval_sec` |
+| Hard-coded 5s refresh | Honor `uiRefreshIntervalSec` |
 | Reimplemented copy/download | `utils.js` helpers |
 | Reorder while filtered | `canReorder` must be true |
 | Stale list overwrite | `latest: true` + fingerprint |
