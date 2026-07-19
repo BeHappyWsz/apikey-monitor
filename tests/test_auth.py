@@ -40,6 +40,19 @@ class AuthServiceTests(unittest.TestCase):
         self.auth.logout(result["token"])
         self.assertIsNone(self.auth.current(result["token"]))
 
+    def test_expired_session_is_rejected(self):
+        self.auth.ensure_bootstrap()
+        result = self.auth.login("admin", "correct-horse-battery-staple", "127.0.0.1")
+        with db.connection(write=True) as conn:
+            conn.execute("UPDATE tbl_sessions SET expires_at=0 WHERE token_hash=?",
+                         (self.auth._token_hash(result["token"]),))
+        self.assertIsNone(self.auth.current(result["token"]))
+
+    def test_bootstrap_keeps_existing_sqlite_key_usable(self):
+        key_id = db.add_key({"base_url": "https://existing.example", "api_key": "sk-existing"})
+        self.assertTrue(self.auth.ensure_bootstrap())
+        self.assertEqual(db.get_key(key_id)["api_key"], "sk-existing")
+
     def test_user_validation_and_login_rate_limit(self):
         self.auth.ensure_bootstrap()
         with self.assertRaises(AuthError):

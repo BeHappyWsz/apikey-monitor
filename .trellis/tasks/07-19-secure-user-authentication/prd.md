@@ -26,7 +26,7 @@ Add a secure login boundary that protects the application UI and API-key data wi
 
 ## Acceptance Criteria
 
-- [ ] Protected endpoints reject unauthenticated requests and the UI supplies the chosen session credential correctly.
-- [ ] Password hashes use a unique salt and configurable work factor; tests prove plaintext passwords are never persisted.
-- [ ] Login failure, lockout/rate limit, logout, expiry, CSRF, bootstrap, user creation, and administrator recovery paths have automated tests.
-- [ ] Existing SQLite data remains usable after authentication is enabled.
+- [x] Protected endpoints reject unauthenticated requests and the UI supplies the chosen session credential correctly.
+- [x] Password hashes use a unique salt and configurable work factor; tests prove plaintext passwords are never persisted.
+- [x] Login failure, lockout/rate limit, logout, expiry, CSRF, bootstrap, user creation, and administrator recovery paths have automated tests.
+- [x] Existing SQLite data remains usable after authentication is enabled.
