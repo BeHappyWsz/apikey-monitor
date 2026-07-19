@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
+- **Total Sessions**: 5
 - **Last Active**: 2026-07-19
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~165 | Active |
+| `journal-1.md` | ~198 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-07-19 | Migrate settings metadata and refine admin controls | `70adb1d` | `main` |
 | 4 | 2026-07-19 | Archive Anthropic probe reliability task | `7174162` | `main` |
 | 3 | 2026-07-17 | Release v0.1.1 monitor efficiency and protocol-aware ops | `b22ebaf`, `b7bca4c`, `48ee6af`, `a4023fc` | `main` |
 | 2 | 2026-07-16 | Wave2: frontend split + custom check_path | `0802b48`, `50c03d8` | `main` |

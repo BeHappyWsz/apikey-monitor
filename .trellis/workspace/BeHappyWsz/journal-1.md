@@ -163,3 +163,36 @@ Re-ran the complete 92-test suite successfully, then archived 07-17-fix-anthropi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Migrate settings metadata and refine admin controls
+
+**Date**: 2026-07-19
+**Task**: Migrate settings metadata and refine admin controls
+**Branch**: `main`
+
+### Summary
+
+Migrated durable tables to tbl_* names, added and backfilled the backend-only tbl_settings.name metadata column in MySQL, and verified all 12 live setting descriptions. Refined authenticated admin controls and validated the 99-test suite.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `70adb1d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
