@@ -8,9 +8,9 @@
 
 | Constraint | Implication |
 |------------|-------------|
-| Zero third-party Python deps | No `pip install` for runtime. Do not add `requirements.txt` packages without an Issue. |
+| Pinned Python dependencies | Install `requirements.txt` before running. Add, remove, or upgrade a package only with an explicit review and matching documentation/test update. |
 | Zero frontend build step | Edit `static/**` and refresh the browser. No webpack/vite required to run. |
-| Local single-user tool | Default bind `127.0.0.1`. **No web login/password by design.** Secrets in SQLite plaintext; protect OS file permissions. |
+| Local administrator tool | Default bind `127.0.0.1`. Administrator login, opaque sessions, and CSRF protection are required; secrets in the primary store remain plaintext, so protect OS file permissions. |
 | Portable data | Schema changes must go through `db._migrate` so an existing `data.db` still opens. |
 
 ---
@@ -20,6 +20,7 @@
 | Tool | Version | Required for |
 |------|---------|----------------|
 | Python | **3.10+** (3.11?3.13 recommended) | App + unit/integration tests |
+| Python packages | `argon2-cffi==25.1.0`, `PyMySQL==1.1.2`, `redis==7.1.0` | Authentication; optional MySQL primary storage and Redis cache |
 | Modern browser | ES modules | UI |
 | Node.js | **18+** optional | `node --check`, `node --test tests/state.test.mjs` |
 
@@ -31,6 +32,7 @@ Clone the same git revision on every machine. Do **not** copy `data.db` between 
 
 ```bash
 # from repo root
+python -m pip install -r requirements.txt
 python app.py
 # or without opening a browser
 python app.py --no-browser
@@ -51,7 +53,7 @@ python app.py --host 127.0.0.1 --port 7878 --no-browser
 |------|---------|--------|
 | `data.db` | **No** | Live secrets + settings. Created on first `init_db()`. |
 | `.runtime/` | **No** | Restart status JSON (`APIKEYCONFIG_RUNTIME_DIR`). |
-| `config.json` | Yes (template) | Seed defaults only; UI may rewrite it atomically with current settings (still no secrets). |
+| `config.json` | Tracked seed only | Read at startup for first-run public defaults and private startup options; runtime never rewrites it. Do not put real credentials in the tracked file; use environment variables or an untracked path via `APIKEYCONFIG_CONFIG_PATH`. |
 | Local key dumps / Review notes | **No** | Never commit real keys. |
 
 If two developers each run the app, they each get their own empty or local DB. Share configuration via JSON **export/import**, not by syncing `data.db` over cloud drive while the app is running.
@@ -79,7 +81,7 @@ When debugging restart on another machine, point these vars at a temp folder the
 
 1. **Process CLI** `--host` / `--port` ? effective listen address for this process.
 2. **SQLite `settings` table** ? source of truth at runtime for monitor, concurrency, UI refresh, etc.
-3. **`config.json`** ? seed on first DB init (`INSERT OR IGNORE`); also rewritten when settings are saved (`set_settings(..., persist=True)` ? `write_config_atomic`).
+3. **`config.json`** ? read-only seed on first DB initialization (`INSERT OR IGNORE`) and private startup configuration. Saving settings does not rewrite it.
 4. **`_FALLBACK_DEFAULTS` in `db.py`** ? if config file missing/corrupt.
 
 `server.runtime_settings` on the HTTP server object is the process snapshot used by health and restart (may differ from DB if CLI overrode host/port).
@@ -89,7 +91,7 @@ When debugging restart on another machine, point these vars at a temp folder the
 ## Encoding & line endings
 
 - Python sources use UTF-8 (`# -*- coding: utf-8 -*-` on modules).
-- Read/write `config.json` with `encoding="utf-8"`.
+- Read `config.json` with `encoding="utf-8"`; runtime writes settings only to the selected primary store.
 - UI and many API messages are Chinese; keep new user-facing strings consistent.
 - Prefer LF in git; do not reformat entire files when touching one function.
 
@@ -102,7 +104,7 @@ When debugging restart on another machine, point these vars at a temp folder the
 | Windows | `start.vbs`; integration teardown uses `tasklist` / `taskkill` helpers for detached PIDs. |
 | macOS / Linux | Use `python app.py`; no first-party shell launcher yet (planned). Restart still works via subprocess helper. |
 | Ports | Integration tests bind free `127.0.0.1` ports; close leftover `python app.py` processes if health checks hang. |
-| Firewall | Binding `0.0.0.0` is allowed by validator but **not recommended**; **no web auth by design** — rely on loopback + OS permissions. |
+| Firewall | Binding `0.0.0.0` is allowed by validator but **not recommended**. For network deployment, use a TLS-terminating reverse proxy and the documented `APIKEYCONFIG_TRUST_PROXY=1` setting; do not rely on loopback assumptions. |
 
 Supported `server_host` values in validator: only `127.0.0.1`, `localhost`, `0.0.0.0`.
 
@@ -111,6 +113,7 @@ Supported `server_host` values in validator: only `127.0.0.1`, `localhost`, `0.0
 ## Verify on a fresh machine
 
 ```bash
+python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 node --check static/app.js
 node --check static/js/state.js

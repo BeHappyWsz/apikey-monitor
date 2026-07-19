@@ -1,6 +1,6 @@
 # Database Guidelines
 
-> SQLite access, migrations, settings dual-write, and secret masking for apikey-monitor.
+> SQLite/MySQL access, migrations, settings persistence, and secret masking for apikey-monitor.
 
 ---
 
@@ -277,14 +277,16 @@ Partial update: omitting/empty `api_key` keeps the previous secret (`test_partia
 
 ---
 
-## Settings dual-write
+## Settings persistence and configuration seed
 
-`set_settings(items, persist=True)`:
+`set_settings(items)` UPSERTs settings into `tbl_settings` in the selected
+primary store. `replace_settings(items)` replaces that table during restart
+orchestration. Neither function writes `config.json`.
 
-1. UPSERT into SQLite `settings`.
-2. If `persist`, merge all settings and `write_config_atomic` to `config.json` (temp file + `os.replace`, UTF-8).
-
-`config.json` may gain a `_comment` field; loaders ignore keys starting with `_`.
+`config.json` is read only: `_load_defaults()` uses its public keys to seed a
+new store once, while startup-only private keys (prefixed `_`) configure the
+storage backend and bootstrap behavior. Keep real credentials out of the
+tracked file; use environment overrides or an untracked `APIKEYCONFIG_CONFIG_PATH`.
 
 ---
 

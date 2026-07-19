@@ -7,7 +7,7 @@
 
 本地运行的 **API Key 管理小工具**：收集 / 解析 / 检测 / 导出 OpenAI 兼容与 Anthropic 兼容接口配置。
 
-> **零第三方依赖**：仅需 Python 标准库 + 现代浏览器。默认只监听本机 `127.0.0.1`。
+> **运行依赖**：Python 3.10+、`argon2-cffi`、`PyMySQL` 与 `redis`（见 `requirements.txt`）以及现代浏览器。默认只监听本机 `127.0.0.1`。
 
 ## 功能一览
 
@@ -23,7 +23,7 @@
 - **体验优化**：工具栏「更多」菜单、无选中禁用批量操作、`Ctrl+Enter` 快捷保存、批量检测汇总与问题项筛选
 - **列表脱敏**：列表/详情不返回明文 Key；卡片可一键复制完整 Key（按需取 secret）
 - **JSON 备份/恢复**：备份全部为 JSON；粘贴导入可直接识别同格式 JSON
-- **可选云同步（WebDAV）**：对接坚果云等 WebDAV，显式上传 / 下载合并 / 下载替换（替换前自动本地备份）；零第三方依赖
+- **可选云同步（WebDAV）**：对接坚果云等 WebDAV，显式上传 / 下载合并 / 下载替换（替换前自动本地备份）；不额外引入 WebDAV 客户端依赖
 - **安全换端口**：先释放旧端口再启新端口，失败自动回滚
 - **跨平台启动**：Windows `start.vbs`；macOS/Linux `start.sh`（可选后台）
 
@@ -32,7 +32,7 @@
 | 项目 | 要求 |
 |------|------|
 | Python | **3.10+**（推荐 3.11 / 3.12 / 3.13） |
-| 依赖 | **无**（仅标准库：`http.server` / `sqlite3` / `urllib` 等） |
+| Python 包 | `argon2-cffi==25.1.0`、`PyMySQL==1.1.2`、`redis==7.1.0`（由 `requirements.txt` 固定） |
 | 浏览器 | 支持 ES Modules 的现代浏览器 |
 | 系统 | Windows / macOS / Linux（Windows：`start.vbs`；macOS/Linux：`start.sh`） |
 
@@ -40,6 +40,7 @@
 
 ```bash
 # 进入项目目录后
+python -m pip install -r requirements.txt
 python app.py
 ```
 
@@ -142,7 +143,7 @@ https://api.example.com sk-xxxx
 | 路径 | 说明 |
 |------|------|
 | `data.db` | SQLite，**首次启动自动创建，勿提交到 Git**（含 WebDAV 应用密码） |
-| `config.json` | 运行时设置（无密钥）；页面保存设置后与 DB 同步并**原子写入**本文件 |
+| `config.json` | 首次初始化的设置种子和私有启动配置；运行时设置以 DB 为准，程序不会回写该文件。不要向被 Git 跟踪的文件写入真实密码；部署时优先使用环境变量或仓库外的配置路径。 |
 | `.runtime/` | 单实例 pid / 重启状态；`backups/` 存放云同步「替换前」本地快照（`APIKEYCONFIG_RUNTIME_DIR` 覆盖） |
 | `app.py` | 入口与 HTTP 生命周期 |
 | `core/` | 解析、探活、导出、WebDAV 客户端（包结构 + 扩展注册表；`import core` 仍可用） |

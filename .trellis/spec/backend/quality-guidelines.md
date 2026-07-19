@@ -6,7 +6,7 @@
 
 ## Project Principles (from CONTRIBUTING)
 
-1. **Zero third-party Python dependencies** by default. Discuss in an Issue before adding any.
+1. **Pinned, reviewed Python dependencies**: install `requirements.txt`; discuss and document any addition, removal, or upgrade in an Issue.
 2. **Secret safety**: list/detail APIs never return plaintext `api_key`.
 3. **Small PRs**: one focused change with tests or manual steps.
 4. **Local data compatibility**: schema changes must migrate existing `data.db`.
@@ -29,11 +29,11 @@
 |------|-----------|
 | List/get key responses use `public=True` | `db.public_key`, GET `/api/keys` |
 | Full secret only via `/secret`, export, or internal check | `router.py`, `KEYS.secret` |
-| Default bind `127.0.0.1` | `config.json`, `app.py` |
+| Default bind `127.0.0.1` | `_FALLBACK_DEFAULTS`, `config.json`, `app.py` |
 | Body size limits | `MAX_JSON_BODY`, `MAX_IMPORT_BODY` |
 | No credentials embedded in `base_url` | `core.normalize_base_url` |
 | Partial update empty key keeps secret | `test_partial_update_empty_api_key_keeps_secret` |
-| Never commit `data.db` or real keys | `.gitignore`, CONTRIBUTING |
+| Never commit `data.db`, real keys, or real startup/connection credentials | `.gitignore`, CONTRIBUTING |
 
 ---
 
@@ -69,7 +69,7 @@ When changing:
 
 ## Forbidden Patterns
 
-- Adding pip dependencies without discussion.
+- Adding, removing, or upgrading pip dependencies without review and updating `requirements.txt` / documentation.
 - Returning `api_key` on GET list/detail.
 - Breaking `_migrate` for existing DBs.
 - Synchronous long network I/O inside DB transactions.

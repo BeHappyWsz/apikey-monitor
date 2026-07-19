@@ -6,11 +6,11 @@
 
 ## Overview
 
-Single-repo, **zero third-party Python dependency** local tool:
+Single-repo local administrator tool with fixed, pinned Python dependencies:
 
-- Python **3.10+** standard library (`http.server`, `sqlite3`, `urllib`, `threading`, ?).
+- Python **3.10+** plus `argon2-cffi==25.1.0`, `PyMySQL==1.1.2`, and `redis==7.1.0` from `requirements.txt`.
 - Layering: `api/` (HTTP) ? `services/` (orchestration) ? `core/` / `db.py` / `monitor.py`.
-- Secrets in SQLite **plaintext** today; list/detail APIs must stay masked.
+- Secrets in the selected primary store **plaintext** today; list/detail APIs must stay masked.
 
 Prefer extending current modules over inventing frameworks. For multi-machine setup, also read [Local Development & Portability](../guides/local-dev-and-portability.md).
 

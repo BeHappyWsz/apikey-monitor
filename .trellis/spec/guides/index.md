@@ -2,7 +2,7 @@
 
 > **Purpose**: Expand your thinking to catch things you might not have considered.
 >
-> **Project note (apikey-monitor)**: stack is Python stdlib + vanilla ESM. When examples in the thinking guides mention React/TypeScript components, map them to `static/js` modules, `services/*`, and `api/router.py` boundaries instead.
+> **Project note (apikey-monitor)**: stack is Python 3.10+ with the pinned `argon2-cffi`, `PyMySQL`, and `redis` packages plus vanilla ESM. When examples in the thinking guides mention React/TypeScript components, map them to `static/js` modules, `services/*`, and `api/router.py` boundaries instead.
 
 ---
 
@@ -45,7 +45,7 @@ These guides help you **ask the right questions before coding**.
 - [ ] Feature touches 3+ layers (API, Service, UI, Database)
 - [ ] Data format changes between layers
 - [ ] List vs secret field exposure
-- [ ] Settings dual-write (SQLite + `config.json`)
+- [ ] Settings are persisted in the selected primary store; `config.json` is a read-only initialization seed
 - [ ] UI assumes a settings flag that services do not read yet
 
 ? Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) and backend [Services & Runtime](../backend/services-runtime.md)

@@ -44,7 +44,7 @@ apikey-monitor/
 |       -- anthropic.py
 ??? db.py                  # SQLite + public_key/mask_api_key + migrations
 ??? version.py
-??? config.json            # seed defaults only (no secrets)
+??? config.json            # read-only first-run seed/private startup config; tracked copy must contain no real secrets
 ??? api/
 ?   ??? handler.py         # BaseHTTPRequestHandler
 ?   ??? router.py          # exact path routing + ApiError
@@ -109,7 +109,7 @@ Reference: `api/handler.py`, `api/router.py`.
 
 ## Anti-patterns
 
-- Adding Flask/FastAPI/Django or any pip dependency without an Issue discussion.
+- Adding Flask/FastAPI/Django or changing pinned pip dependencies without an Issue discussion and documentation update.
 - Putting probe HTTP calls inside `db.py` or SQL inside `core/`.
 - Returning full `api_key` from list/get detail handlers (must stay masked).
 - Sharing one global `sqlite3` connection across threads (always use `db.connection()` / `get_conn()` per call).
