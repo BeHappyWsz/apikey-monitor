@@ -28,14 +28,14 @@ const problemKeys=[{id:1,status:"up",name:"U"},{id:2,status:"down",name:"D"},{id
 test("problem filtering",()=>assert.deepEqual(getVisibleKeys(problemKeys,"problem","").map(k=>k.id),[2,3,4,5]));
 
 const cardState={checking:new Set(),selected:new Set(),status:"all",query:""};
-test("card shows every successful protocol",()=>{
-  const html=renderCard({id:1,status:"up",name:"Both",base_url:"https://example.com",supports_openai:true,supports_anthropic:true},cardState);
-  assert.match(html,/<em>OpenAI<\/em>/);
-  assert.match(html,/<em>Anthropic<\/em>/);
+test("card shows each protocol's individual status",()=>{
+  const html=renderCard({id:1,status:"up",name:"Mixed",base_url:"https://example.com",openai_status:"up",anthropic_status:"rate_limited"},cardState);
+  assert.match(html,/OpenAI · 在线/);
+  assert.doesNotMatch(html,/Anthropic/);
 });
 test("card hides stale protocol flags after failure",()=>{
   const html=renderCard({id:1,status:"down",name:"Failed",base_url:"https://example.com",supports_openai:true,supports_anthropic:true},cardState);
   assert.match(html,/未确认/);
-  assert.doesNotMatch(html,/<em>OpenAI<\/em>/);
-  assert.doesNotMatch(html,/<em>Anthropic<\/em>/);
+  assert.doesNotMatch(html,/OpenAI/);
+  assert.doesNotMatch(html,/Anthropic/);
 });

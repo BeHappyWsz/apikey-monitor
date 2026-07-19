@@ -38,7 +38,8 @@ with db.connection(write=True) as conn:
 |--------|--------|
 | `id` | INTEGER PK AUTOINCREMENT |
 | `name`, `base_url`, `api_key` | identity; `api_key` plaintext at rest |
-| `supports_openai`, `supports_anthropic` | 0/1 integers |
+| `supports_openai`, `supports_anthropic` | 0/1 integers recording confirmed capability |
+| `openai_status`, `anthropic_status` | Last independent protocol status: `unknown` / `up` / `down` / `auth_error` / `rate_limited` / `degraded` |
 | `models` | JSON text array string, default `'[]'` |
 | `status` | `unknown` / `up` / `down` / `auth_error` (UI may also filter experimental labels) |
 | `latency_ms`, `last_check_at`, `last_error` | last protocol/health probe |
@@ -86,7 +87,7 @@ No external tool. Evolution path:
 1. Run table-name migration before any target `CREATE TABLE IF NOT EXISTS`.
 2. Update `CREATE TABLE IF NOT EXISTS` for fresh installs.
 3. `_migrate(conn)`: `PRAGMA table_info` + conditional `ALTER TABLE ... ADD COLUMN`.
-4. Set `PRAGMA user_version` (currently **7** after migrate).
+4. Set `PRAGMA user_version` (currently **8** after migrate).
 
 When adding a column:
 
@@ -95,6 +96,79 @@ When adding a column:
 3. Wire `update_key` / row dict / services if user-editable.
 4. Keep old DBs bootable without manual SQL.
 5. Add a unit test for the new field path.
+
+## Scenario: Per-protocol probe status
+
+### 1. Scope / Trigger
+
+Use this contract when a key can be reachable through one protocol while a
+second protocol is rate-limited, rejected, or unavailable. A single aggregate
+`status` cannot represent that distinction without hiding useful diagnosis.
+
+### 2. Signatures
+
+- `tbl_keys.openai_status` and `tbl_keys.anthropic_status` are status strings
+  defaulting to `unknown`.
+- `core.probe._result_from_protocols(protocols)` returns both fields.
+- `db.update_status(..., openai_status=None, anthropic_status=None)` persists
+  them; `KeyService._save_result` passes the probe result through unchanged.
+
+### 3. Contracts
+
+- Each per-protocol status is one of `unknown`, `up`, `down`, `auth_error`,
+  `rate_limited`, or `degraded` and reflects that protocol's most recent
+  probe, not its historical capability flag.
+- Aggregate `status` remains the availability state for filtering: it is `up`
+  when any protocol is usable. `supports_openai` / `supports_anthropic` still
+  record confirmed capability and must not be used as a substitute for the
+  per-protocol statuses.
+- Fresh and migrated rows start at `unknown`; only a new probe may claim `up`.
+  Public key responses include the two statuses but never include `api_key`.
+
+### 4. Validation & Error Matrix
+
+| OpenAI | Anthropic | Aggregate `status` | Required card output |
+| --- | --- | --- | --- |
+| `up` | `rate_limited` | `up` | Online overall; Anthropic limited |
+| `up` | `auth_error` | `up` | Online overall; Anthropic rejected |
+| `auth_error` | `auth_error` | `auth_error` | Both protocol errors |
+| `down` | `down` | `down` | Both protocol failures |
+| `unknown` | `unknown` | existing aggregate | Both remain unknown until probed |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a key with OpenAI 200 and Anthropic 429 remains usable and visibly
+  reports the Anthropic limit.
+- Base: a newly migrated key displays unknown protocol statuses until its next
+  scheduled or manual check.
+- Bad: deriving a current protocol status from `supports_*`; those flags can
+  describe an older successful probe after a newer failure.
+
+### 6. Tests Required
+
+- `tests/test_core_db.py` asserts mixed probe results return each independent
+  status while preserving aggregate availability.
+- `tests/state.test.mjs` asserts the card renders OpenAI and Anthropic status
+  labels independently and does not resurrect stale capability flags.
+- Schema tests must cover fresh SQLite columns; configured MySQL integration
+  must assert the two columns after `init_db()`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+# A secondary 429/403 vanishes when aggregate status is "up".
+card_protocols = ["OpenAI"] if key["supports_openai"] else []
+```
+
+#### Correct
+
+```python
+# Show current probe outcomes independently of historical capability flags.
+protocols = [("OpenAI", key["openai_status"]),
+             ("Anthropic", key["anthropic_status"])]
+```
 
 ## Scenario: `tbl_*` table-name migration
 

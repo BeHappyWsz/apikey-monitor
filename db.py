@@ -307,14 +307,15 @@ def _migrate(conn):
     cols = {row[1] for row in conn.execute("PRAGMA table_info(tbl_keys)")}
     for col, decl in (("check_model", "TEXT DEFAULT ''"), ("model_status", "TEXT DEFAULT 'unknown'"),
                       ("model_latency_ms", "INTEGER"), ("model_last_check_at", "INTEGER"),
-                      ("model_last_error", "TEXT DEFAULT ''"), ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''")):
+                      ("model_last_error", "TEXT DEFAULT ''"), ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''"),
+                      ("openai_status", "TEXT DEFAULT 'unknown'"), ("anthropic_status", "TEXT DEFAULT 'unknown'")):
         if col not in cols:
             conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {col} {decl}")
     settings_cols = {row[1] for row in conn.execute("PRAGMA table_info(tbl_settings)")}
     if "name" not in settings_cols:
         conn.execute("ALTER TABLE tbl_settings ADD COLUMN name TEXT NOT NULL DEFAULT ''")
     _backfill_setting_names(conn)
-    conn.execute("PRAGMA user_version=7")
+    conn.execute("PRAGMA user_version=8")
     conn.execute("DELETE FROM tbl_settings WHERE k = 'webdav_last_sync'")
     _to_row = conn.execute("SELECT v FROM tbl_settings WHERE k='request_timeout_sec'").fetchone()
     if _to_row and str(_to_row["v"]) == "15":
@@ -392,7 +393,8 @@ def init_db():
         conn.execute("""CREATE TABLE IF NOT EXISTS tbl_keys (
             id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT DEFAULT '', base_url TEXT NOT NULL,
             api_key TEXT NOT NULL, supports_anthropic INTEGER DEFAULT 0,
-            supports_openai INTEGER DEFAULT 0, models TEXT DEFAULT '[]', status TEXT DEFAULT 'unknown',
+            supports_openai INTEGER DEFAULT 0, openai_status TEXT DEFAULT 'unknown', anthropic_status TEXT DEFAULT 'unknown',
+            models TEXT DEFAULT '[]', status TEXT DEFAULT 'unknown',
             latency_ms INTEGER, last_check_at INTEGER, last_error TEXT DEFAULT '',
             monitor_enabled INTEGER DEFAULT 1, interval_sec INTEGER, notes TEXT DEFAULT '',
             created_at INTEGER, check_model TEXT DEFAULT '', model_status TEXT DEFAULT 'unknown',
@@ -419,7 +421,7 @@ def _init_mysql():
     with connection(write=True) as conn:
         _migrate_table_names_mysql(conn)
         statements = [
-            """CREATE TABLE IF NOT EXISTS tbl_keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,sort_order BIGINT DEFAULT 0,check_path TEXT,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at)) CHARACTER SET utf8mb4""",
+            """CREATE TABLE IF NOT EXISTS tbl_keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,openai_status VARCHAR(32) DEFAULT 'unknown',anthropic_status VARCHAR(32) DEFAULT 'unknown',models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,sort_order BIGINT DEFAULT 0,check_path TEXT,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at)) CHARACTER SET utf8mb4""",
             "CREATE TABLE IF NOT EXISTS tbl_settings (k VARCHAR(191) PRIMARY KEY,v LONGTEXT,name VARCHAR(255) NOT NULL DEFAULT '') CHARACTER SET utf8mb4",
             "CREATE TABLE IF NOT EXISTS tbl_users (id BIGINT PRIMARY KEY AUTO_INCREMENT,username VARCHAR(64) NOT NULL UNIQUE,password_hash TEXT NOT NULL,must_change_password TINYINT DEFAULT 0,enabled TINYINT NOT NULL DEFAULT 1,created_at BIGINT NOT NULL) CHARACTER SET utf8mb4",
             "CREATE TABLE IF NOT EXISTS tbl_sessions (token_hash CHAR(64) PRIMARY KEY,user_id BIGINT NOT NULL,csrf_token TEXT NOT NULL,created_at BIGINT NOT NULL,expires_at BIGINT NOT NULL,last_seen_at BIGINT NOT NULL,INDEX idx_sessions_expires_at(expires_at),FOREIGN KEY(user_id) REFERENCES tbl_users(id) ON DELETE CASCADE) CHARACTER SET utf8mb4",
@@ -433,6 +435,12 @@ def _init_mysql():
             conn.execute("ALTER TABLE tbl_users ADD COLUMN must_change_password TINYINT DEFAULT 0")
         if "enabled" not in user_columns:
             conn.execute("ALTER TABLE tbl_users ADD COLUMN enabled TINYINT NOT NULL DEFAULT 1")
+        key_columns = {row["COLUMN_NAME"] for row in conn.execute(
+            "SELECT COLUMN_NAME FROM information_schema.columns "
+            "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}
+        for column in ("openai_status", "anthropic_status"):
+            if column not in key_columns:
+                conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {column} VARCHAR(32) DEFAULT 'unknown'")
         settings_columns = {row["COLUMN_NAME"] for row in conn.execute(
             "SELECT COLUMN_NAME FROM information_schema.columns "
             "WHERE table_schema=DATABASE() AND table_name='tbl_settings'")}
@@ -701,7 +709,7 @@ def update_key(key_id, data):
     if not fields:
         return False
     if "base_url" in data or "api_key" in data:
-        fields.extend(["status='unknown'", "supports_openai=0", "supports_anthropic=0", "models='[]'",
+        fields.extend(["status='unknown'", "supports_openai=0", "supports_anthropic=0", "openai_status='unknown'", "anthropic_status='unknown'", "models='[]'",
                        "latency_ms=NULL", "last_check_at=NULL", "last_error=''", "model_status='unknown'",
                        "model_latency_ms=NULL", "model_last_check_at=NULL", "model_last_error=''"])
     with connection(write=True) as conn:
@@ -723,7 +731,8 @@ def delete_keys(ids):
     return count
 
 
-def update_status(key_id, status, latency_ms, error, supports_anthropic=None, supports_openai=None, models=None):
+def update_status(key_id, status, latency_ms, error, supports_anthropic=None, supports_openai=None, models=None,
+                  openai_status=None, anthropic_status=None):
     sets = ["status=?", "latency_ms=?", "last_error=?", "last_check_at=?"]
     values = [status, latency_ms, (error or "")[:300], int(time.time())]
     if supports_anthropic is not None:
@@ -732,6 +741,10 @@ def update_status(key_id, status, latency_ms, error, supports_anthropic=None, su
         sets.append("supports_openai=?"); values.append(int(bool(supports_openai)))
     if models is not None:
         sets.append("models=?"); values.append(json.dumps(models[:200], ensure_ascii=False))
+    if openai_status is not None:
+        sets.append("openai_status=?"); values.append(openai_status)
+    if anthropic_status is not None:
+        sets.append("anthropic_status=?"); values.append(anthropic_status)
     with connection(write=True) as conn:
         conn.execute(f"UPDATE tbl_keys SET {', '.join(sets)} WHERE id=?", (*values, key_id))
     touch_list_generation()

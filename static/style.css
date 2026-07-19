@@ -487,6 +487,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .status.degraded, .model-state.degraded { color:#d46b08; background:#fff7e6; }
 .dot.rate_limited, .dot.degraded { background:#faad14; }
 .metric em { font-style:normal; display:inline-block; border-radius:999px; background:#eef5ff; color:var(--accent); padding:2px 7px; font-size:11px; }
+.protocol-statuses { display:flex; flex-wrap:wrap; gap:5px; }
+.metric .protocol-state { margin:0; }
+.protocol-state.up { color:#168a4a; background:#f0fff4; }
+.protocol-state.rate-limited, .protocol-state.degraded { color:#ad6800; background:#fff7e6; }
+.protocol-state.auth-error, .protocol-state.down { color:#cf1322; background:#fff1f0; }
+.protocol-state.unknown { color:var(--muted); background:var(--panel2); }
 .card-details { margin:0 16px; border-top:1px dashed var(--border); padding:10px 0; color:var(--muted); }
 .card-details summary { cursor:pointer; font-size:12px; font-weight:700; }
 .card-details p { margin:9px 0 0; line-height:1.65; overflow-wrap:anywhere; }
@@ -711,6 +717,19 @@ table.cand { min-width:650px; }
   line-height: 1.45;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.metric b.protocol-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+.metric b.protocol-statuses .protocol-state {
+  flex: 0 0 auto;
+  max-width: none;
   white-space: nowrap;
 }
 .primary-metric b {

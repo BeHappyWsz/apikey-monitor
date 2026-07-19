@@ -20,7 +20,8 @@ class KeyService:
 
     def _save_result(self, key_id, result):
         db.update_status(key_id, result["status"], result.get("latency_ms"), result.get("error"),
-                         result.get("supports_anthropic"), result.get("supports_openai"), result.get("models"))
+                         result.get("supports_anthropic"), result.get("supports_openai"), result.get("models"),
+                         result.get("openai_status"), result.get("anthropic_status"))
         if result.get("model_status") and result["model_status"] != "unknown":
             db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"), result.get("model_error"))
 

@@ -49,6 +49,8 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(result.get("error"))
         self.assertTrue(result["supports_openai"])
         self.assertFalse(result["supports_anthropic"])
+        self.assertEqual(result["openai_status"], "up")
+        self.assertEqual(result["anthropic_status"], "down")
 
     def test_aggregate_errors_only_from_winning_status(self):
         protocols = [
@@ -88,6 +90,8 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["status"], "auth_error")
         self.assertFalse(result["supports_openai"])
         self.assertFalse(result["supports_anthropic"])
+        self.assertEqual(result["openai_status"], "auth_error")
+        self.assertEqual(result["anthropic_status"], "auth_error")
 
     def test_model_result_does_not_replace_protocol_status(self):
         responses = [(200, '{"data":[]}', 1, None), (404, "", 1, "HTTP 404"), (404, "", 1, "HTTP 404")]
@@ -333,8 +337,10 @@ class DbTests(unittest.TestCase):
             with db.connection() as conn:
                 tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 foreign_keys = conn.execute("PRAGMA foreign_key_list(tbl_sessions)").fetchall()
+                key_columns = {row[1] for row in conn.execute("PRAGMA table_info(tbl_keys)")}
             self.assertTrue({"tbl_keys", "tbl_settings", "tbl_users", "tbl_sessions"} <= tables)
             self.assertFalse({"keys", "settings", "users", "sessions"} & tables)
+            self.assertTrue({"openai_status", "anthropic_status"} <= key_columns)
             self.assertEqual(db.get_key(7)["api_key"], "sk-legacy")
             self.assertEqual(db.get_key(7)["models"], ["model-a"])
             self.assertEqual(db.get_all_settings()["custom"], "preserved")

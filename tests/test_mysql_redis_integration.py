@@ -37,8 +37,12 @@ class MySqlRedisIntegrationTests(unittest.TestCase):
             setting_columns = {row["COLUMN_NAME"] for row in conn.execute(
                 "SELECT COLUMN_NAME FROM information_schema.columns "
                 "WHERE table_schema=DATABASE() AND table_name='tbl_settings'")}
+            key_columns = {row["COLUMN_NAME"] for row in conn.execute(
+                "SELECT COLUMN_NAME FROM information_schema.columns "
+                "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}
         self.assertTrue({"tbl_keys", "tbl_settings", "tbl_users", "tbl_sessions"} <= tables)
         self.assertTrue({"k", "v", "name"} <= setting_columns)
+        self.assertTrue({"openai_status", "anthropic_status"} <= key_columns)
 
         self.key_id = db.add_key({
             "name": self.marker,

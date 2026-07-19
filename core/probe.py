@@ -22,6 +22,8 @@ def _empty_result(error):
     return {
         "supports_openai": False,
         "supports_anthropic": False,
+        "openai_status": "unknown",
+        "anthropic_status": "unknown",
         "models": [],
         "status": "down",
         "latency_ms": None,
@@ -79,6 +81,8 @@ def _result_from_protocols(protocols):
     return {
         "supports_openai": supports_openai_out,
         "supports_anthropic": supports_anthropic_out,
+        "openai_status": openai.get("status", "unknown") if openai else "unknown",
+        "anthropic_status": anth.get("status", "unknown") if anth else "unknown",
         "models": models,
         "status": status,
         "latency_ms": latency,
