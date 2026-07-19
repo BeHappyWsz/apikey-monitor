@@ -13,9 +13,11 @@ cookie. Unsafe requests also require `X-CSRF-Token` from `GET /api/auth/me`.
 | `GET /api/auth/me` | Returns the authenticated user and CSRF token. |
 | `GET /api/auth/users` | Lists administrator accounts. |
 | `POST /api/auth/users` | Creates an administrator; requires `username` and a 12+ character password. |
+| `PUT /api/auth/users/{id}` | Enables or disables another administrator with `{ "enabled": true\|false }`; disabling revokes that account's sessions and self-disable is rejected. |
 
-Authentication failures use `401 unauthenticated`, CSRF failures use
-`403 csrf_failed`, and login throttling uses `429 login_rate_limited`.
+Authentication failures use `401 unauthenticated`, disabled accounts receive
+`403 account_disabled`, CSRF failures use `403 csrf_failed`, and login
+throttling uses `429 login_rate_limited`.
 
 服务默认地址：
 

@@ -3,6 +3,8 @@
 [![Release](https://img.shields.io/github/v/release/BeHappyWsz/apikey-monitor?display_name=tag)](https://github.com/BeHappyWsz/apikey-monitor/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+> **管理员访问**：首次启动会创建管理员账户。登录、初始密码修改、会话保护、CSRF 防护和用户管理说明见 [`docs/authentication.md`](docs/authentication.md)。
+
 本地运行的 **API Key 管理小工具**：收集 / 解析 / 检测 / 导出 OpenAI 兼容与 Anthropic 兼容接口配置。
 
 > **零第三方依赖**：仅需 Python 标准库 + 现代浏览器。默认只监听本机 `127.0.0.1`。
@@ -15,6 +17,7 @@
 - **自定义探活路径**：每条 Key 可选相对路径 `check_path`，覆盖连通性/协议探测默认入口（模型探测仍用内置路径）
 - **定时监测**：连通性、认证状态、延迟；支持全局与单条开关
 - **Web 管理**：筛选、批量检测/删除、拖拽排序、编辑、导出
+- **管理员登录与用户管理**：管理员会话、首次登录强制修改初始密码、创建账户，以及启用/禁用其他管理员账户（禁用会立即撤销其会话）
 - **批量任务**：导入/批量检测显示进度与失败数
 - **配置导出**：Claude Code、Codex CLI、`.env`、PowerShell、JSON；支持**批量 JSON**、下载文件与格式记忆
 - **体验优化**：工具栏「更多」菜单、无选中禁用批量操作、`Ctrl+Enter` 快捷保存、批量检测汇总与问题项筛选
@@ -126,6 +129,14 @@ https://api.example.com sk-xxxx
 
 每条 Key 也可单独开/关监测。
 
+## 登录与用户管理
+
+- 首次启动且数据库中没有账户时，程序使用 `config.json` 中的
+  `_bootstrap_admin_username` 和 `_bootstrap_admin_password` 创建首个管理员；初始密码至少 12 位，首次登录后必须修改。
+- 所有账户都是管理员。已登录管理员可在右上角“用户管理”中创建账户，或启用/禁用其他账户；不能禁用当前登录账户。
+- 登录会话为 HttpOnly Cookie，写操作需要 CSRF 令牌；会话默认 8 小时过期，退出或禁用账户会撤销对应会话。
+- 默认仍只监听 `127.0.0.1`。如需经 HTTPS 反向代理对外提供访问，请按 [`docs/authentication.md`](docs/authentication.md) 配置可信代理与 `APIKEYCONFIG_TRUST_PROXY=1`。
+
 ## 数据与目录
 
 | 路径 | 说明 |
@@ -148,7 +159,7 @@ https://api.example.com sk-xxxx
 
 ## 安全注意
 
-- **定位**：本机单用户运维工具。默认绑定 `127.0.0.1`，**不提供** Web 登录或访问密码；请勿当作可公网暴露的服务。
+- **定位**：本地管理员运维工具。默认绑定 `127.0.0.1`；提供管理员登录，但仍不应作为未受 HTTPS 反向代理保护的公网服务。
 - API Key **明文**存在本地 `data.db`，请保护目录与系统账户权限；不要把 `data.db` 同步到不可信位置。
 - **不建议**监听 `0.0.0.0`，更不要暴露公网。页面「系统设置」在选择 `0.0.0.0` 时会显示风险提示并二次确认。
 - **列表脱敏**：`GET /api/keys`、`GET /api/keys/{id}` 仅返回 `api_key_masked` / `has_api_key`。

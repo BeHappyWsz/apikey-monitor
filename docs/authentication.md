@@ -3,14 +3,17 @@
 ## Bootstrap
 
 On a database without users, the application reads `_bootstrap_admin_username`
-from `config.json` (default `admin`) and reads the initial password from
-`APIKEYCONFIG_BOOTSTRAP_PASSWORD`. The password must contain at least 12
-characters. It is hashed with Argon2id before persistence and is never written
-back to `config.json`.
+and `_bootstrap_admin_password` from `config.json` (the username defaults to
+`admin`). The password must contain at least 12 characters. It is hashed with
+Argon2id before persistence; after the initial administrator has been created,
+the bootstrap password is not used again. Deployments must replace the shipped
+bootstrap password before first start.
 
 All accounts are administrators. An authenticated administrator can create
-another account from the user menu. There are no roles, tenants, self-service
-registration, or email recovery flows.
+another account from the user menu and can enable or disable another account.
+Disabling an account immediately revokes all of its sessions; an administrator
+cannot disable their own currently authenticated account. There are no roles,
+tenants, self-service registration, or email recovery flows.
 
 ## HTTP protection
 
@@ -31,4 +34,3 @@ binding requires a TLS-terminating reverse proxy and
 the session cookie marked `Secure` based on `X-Forwarded-Proto: https`.
 
 Container files and certificate orchestration are intentionally deferred.
-
