@@ -6,6 +6,8 @@ from services.task_service import TASKS
 
 class KeyService:
     def list(self, public=True): return db.list_keys(public=public)
+    def page(self, limit=50, cursor="", status_filter="all", search=""):
+        return db.list_keys_page(limit, cursor, status_filter, search)
     def get(self, key_id, public=False): return db.get_key(key_id, public=public)
     def secret(self, key_id):
         entry = db.get_key(key_id)
@@ -14,16 +16,34 @@ class KeyService:
 
     def delete(self, ids): return db.delete_keys(ids)
     def reorder(self, ids): return db.reorder_keys(ids)
+    def move_before(self, key_id, before_id=None): return db.move_key_before(key_id, before_id)
 
-    def _timeout(self):
-        return int(db.get_all_settings().get("request_timeout_sec", 15))
+    def _settings(self):
+        return db.get_all_settings()
 
-    def _save_result(self, key_id, result):
+    def _save_result(self, entry, result, settings):
+        key_id = entry["id"]
+        next_check_at = db.monitor_next_check_at(entry, result["status"], settings)
         db.update_status(key_id, result["status"], result.get("latency_ms"), result.get("error"),
                          result.get("supports_anthropic"), result.get("supports_openai"), result.get("models"),
-                         result.get("openai_status"), result.get("anthropic_status"))
+                         result.get("openai_status"), result.get("anthropic_status"), next_check_at)
         if result.get("model_status") and result["model_status"] != "unknown":
             db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"), result.get("model_error"))
+
+    def _probe(self, entry, health):
+        settings = self._settings()
+        timeout = int(settings.get("request_timeout_sec", 45))
+        concurrency = int(settings.get("concurrency", 8))
+        with TASKS.probe_slot(concurrency):
+            if health:
+                result = core.health_check(entry["base_url"], entry["api_key"],
+                    bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
+                    timeout, entry.get("check_model", ""), entry.get("check_path", ""))
+            else:
+                result = core.classify(entry["base_url"], entry["api_key"], timeout,
+                    entry.get("check_model", ""), entry.get("check_path", ""))
+        self._save_result(entry, result, settings)
+        return result
 
     def check(self, key_id, health=False):
         entry = db.get_key(key_id)
@@ -32,14 +52,7 @@ class KeyService:
         if not TASKS.acquire(key_id):
             raise RuntimeError("key is already being checked")
         try:
-            if health:
-                result = core.health_check(entry["base_url"], entry["api_key"],
-                    bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
-                    self._timeout(), entry.get("check_model", ""), entry.get("check_path", ""))
-            else:
-                result = core.classify(entry["base_url"], entry["api_key"], self._timeout(), entry.get("check_model", ""), entry.get("check_path", ""))
-            self._save_result(key_id, result)
-            return result
+            return self._probe(entry, health)
         finally:
             TASKS.release(key_id)
 
@@ -47,14 +60,7 @@ class KeyService:
         entry = db.get_key(key_id)
         if not entry:
             raise KeyError("key not found")
-        if health:
-            result = core.health_check(entry["base_url"], entry["api_key"],
-                    bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
-                    self._timeout(), entry.get("check_model", ""), entry.get("check_path", ""))
-        else:
-            result = core.classify(entry["base_url"], entry["api_key"], self._timeout(), entry.get("check_model", ""), entry.get("check_path", ""))
-        self._save_result(key_id, result)
-        return result
+        return self._probe(entry, health)
 
     def batch_check(self, ids, health=False):
         concurrency = int(db.get_all_settings().get("concurrency", 8))
@@ -90,8 +96,11 @@ class KeyService:
         if not TASKS.acquire(key_id):
             raise RuntimeError("key is already being checked")
         try:
-            result = core.model_check(entry["base_url"], entry["api_key"], model,
-                                      bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")), self._timeout())
+            settings = self._settings()
+            with TASKS.probe_slot(int(settings.get("concurrency", 8))):
+                result = core.model_check(entry["base_url"], entry["api_key"], model,
+                                          bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
+                                          int(settings.get("request_timeout_sec", 45)))
             db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"), result.get("model_error"))
             if model != entry.get("check_model"):
                 db.update_key(key_id, {"check_model": model})

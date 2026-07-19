@@ -58,12 +58,37 @@ class ListRevisionTests(unittest.TestCase):
             db.update_status(kid, "up", 1, "")
             # force last_check_at via direct SQL for deterministic order
             with db.connection(write=True) as conn:
-                conn.execute("UPDATE tbl_keys SET last_check_at=? WHERE id=?", (now - 1000 + i, kid))
+                conn.execute("UPDATE tbl_keys SET last_check_at=?,next_check_at=? WHERE id=?",
+                             (now - 1000 + i, now - 1000 + i, kid))
             ids.append(kid)
         due = db.get_due_keys(now, up_interval=60, down_interval=30, limit=2)
         self.assertEqual(len(due), 2)
         self.assertEqual(due[0]["id"], ids[0])
         self.assertEqual(due[1]["id"], ids[1])
+
+    def test_next_check_schedule_applies_backoff_and_jitter(self):
+        entry = {"id": 7, "interval_sec": None}
+        settings = {"global_interval_sec": "300", "down_recheck_interval_sec": "120"}
+        now = 10000
+        up = db.monitor_next_check_at(entry, "up", settings, now)
+        down = db.monitor_next_check_at(entry, "down", settings, now)
+        limited = db.monitor_next_check_at(entry, "rate_limited", settings, now)
+        auth = db.monitor_next_check_at(entry, "auth_error", settings, now)
+        self.assertGreaterEqual(up, now + 285)
+        self.assertLessEqual(up, now + 315)
+        self.assertGreaterEqual(down, now + 114)
+        self.assertLessEqual(down, now + 126)
+        self.assertGreaterEqual(limited, now + 1140)
+        self.assertGreater(auth, limited)
+
+    def test_get_due_keys_uses_persisted_schedule(self):
+        now = int(time.time())
+        due_id = db.add_key({"base_url": "https://due.example", "api_key": "sk-due"})
+        future_id = db.add_key({"base_url": "https://future.example", "api_key": "sk-future"})
+        with db.connection(write=True) as conn:
+            conn.execute("UPDATE tbl_keys SET next_check_at=? WHERE id=?", (now - 1, due_id))
+            conn.execute("UPDATE tbl_keys SET next_check_at=? WHERE id=?", (now + 3600, future_id))
+        self.assertEqual([entry["id"] for entry in db.get_due_keys(now, limit=10)], [due_id])
 
 
 class MonitorTickGuardTests(unittest.TestCase):

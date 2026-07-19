@@ -33,6 +33,7 @@ http://127.0.0.1:7878
 
 ```http
 GET /api/keys
+GET /api/keys/page?limit=50&cursor=&status=all&q=
 GET /api/keys/revision
 ```
 
@@ -50,6 +51,43 @@ GET /api/keys/revision
   "status": "up"
 }
 ```
+
+`GET /api/keys` remains available for compatibility. The web panel uses the
+cursor-paged endpoint so it does not repeatedly transfer every key:
+
+- `limit`: optional `1`–`100`, default `50` (values outside that range are
+  constrained by the server).
+- `cursor`: opaque value from the previous response's `next_cursor`; omit it
+  for the first page.
+- `status`: `all`, `up`, `down`, `auth_error`, `unknown`, `issue`, or
+  `problem`.
+- `q`: optional case-insensitive search over the public list fields.
+
+The response is always masked and has this shape:
+
+```json
+{
+  "items": [{ "id": 1, "name": "example", "api_key_masked": "sk-…" }],
+  "next_cursor": "WzAsLTEwLDFd",
+  "total": 148,
+  "summary": {
+    "all": 148,
+    "up": 120,
+    "down": 4,
+    "auth_error": 2,
+    "unknown": 20,
+    "issue": 2,
+    "problem": 28,
+    "avg_latency_ms": 231
+  },
+  "revision": "opaque-revision"
+}
+```
+
+`total` is scoped to the requested `status` and `q`; `summary` is scoped to
+`q` only, so the panel can keep status counters accurate. A changed list
+revision only raises a refresh prompt while the user is browsing; pressing
+Refresh explicitly reloads the first page with the current filters.
 
 ### 新增单条
 
@@ -252,7 +290,7 @@ Content-Type: application/json
 
 ## WebDAV 同步
 
-WebDAV 同步是可选能力。服务器会把当前 Key 列表打包为 JSON 同步载荷后上传到远程文件；下载时可选择合并或全量替换。`password` 仅在保存时提交，查询配置不会返回明文密码。
+WebDAV 同步是可选能力。服务器会把当前 Key 列表打包为 JSON 同步载荷后上传到远程文件；下载时可选择合并或全量替换。同步边界固定为 `name`、`base_url`、`api_key`、`check_model`、`check_path`：替换模式也只会替换本机 `tbl_keys` 记录，绝不会覆盖设置、用户、会话、WebDAV 凭据、监测状态或其他本机数据。`password` 仅在保存时提交，查询配置不会返回明文密码。
 
 ### 获取同步配置
 
@@ -489,6 +527,9 @@ Content-Type: application/json
 
 - 环境变量 / curl / `URL + Key` 纯文本
 - 导出/备份 JSON 数组、单条对象，或 `{ "items": [...] }` / `{ "keys": [...] }`
+- 含普通说明文字的 Markdown；JSON 位于 ````json` 代码块时也会被识别。
+
+解析器只会把同一行或相邻少量行内可关联的 URL 与密钥组成候选项，避免把聊天记录中相距较远的普通链接和长字符串误当成配置。支持 `Bearer`、`OPENAI_*` / `ANTHROPIC_*`、`api_key` / `apiKey` 等常见标记；最终导入前仍由后端校验 URL 与密钥字段。
 
 返回 `candidates` 数组，元素含 `name`、`base_url`、`api_key`，以及可选的 `check_model`、`check_path`、`notes`。
 

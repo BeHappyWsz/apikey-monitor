@@ -32,7 +32,7 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(result["supports_anthropic"])
 
     def test_mixed_protocol_auth_and_success_is_up(self):
-        responses = [(401, "", 2, "HTTP 401"), (200, "{}", 3, None)]
+        responses = [(401, "", 2, "HTTP 401"), (200, '{"content":[{"type":"text","text":"OK"}]}', 3, None)]
         with patch("core.http._request", side_effect=responses):
             result = core.classify("https://example.com", "sk-test")
         self.assertEqual(result["status"], "up")
@@ -101,6 +101,28 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["status"], "up")
         self.assertEqual(result["model_status"], "auth_error")
 
+    def test_strict_openai_model_check_requires_generated_text(self):
+        with patch("core.http._request", return_value=(200,
+                '{"choices":[{"message":{"content":"OK"}}]}', 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertTrue(result["model_verified"])
+        self.assertEqual(result["model_verification_version"], 1)
+
+    def test_strict_openai_model_check_rejects_empty_or_proxy_response(self):
+        with patch("core.http._request", return_value=(200, "{}", 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "degraded")
+        self.assertFalse(result["model_verified"])
+        self.assertIn("invalid OpenAI completion response", result["model_error"])
+
+    def test_strict_anthropic_model_check_requires_text_block(self):
+        with patch("core.http._request", return_value=(200,
+                '{"content":[{"type":"text","text":"OK"}]}', 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "claude-test", supports_anthropic=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertTrue(result["model_verified"])
+
 
     def test_export_formats(self):
         entry = {"id": 1, "name": "demo", "base_url": "https://example.com/v1", "api_key": "sk-demo"}
@@ -141,6 +163,33 @@ class CoreTests(unittest.TestCase):
         paste = core.parse_import_text("OPENAI_BASE_URL=https://e.example\nOPENAI_API_KEY=sk-eeeeeeeeeeee")
         self.assertEqual(len(paste), 1)
         self.assertEqual(paste[0]["base_url"], "https://e.example")
+
+    def test_parse_import_tolerates_chat_text_and_fenced_json(self):
+        mixed = """这里是说明，不要把普通链接当作密钥： https://docs.example/help
+
+```json
+{"keys":[{"name":"copied","base_url":"https://api.example/v1","api_key":"sk-embedded-1234567890"}]}
+```
+
+上面是备份，后续对话内容不应影响解析。
+"""
+        parsed = core.parse_import_text(mixed)
+        self.assertEqual([(item["name"], item["base_url"], item["api_key"])
+                          for item in parsed],
+                         [("copied", "https://api.example/v1", "sk-embedded-1234567890")])
+
+    def test_parse_import_does_not_pair_distant_chat_hash_with_url(self):
+        chat = """请阅读 https://docs.example/guide ，这是普通文档链接。
+这几行都是说明文字，并不是配置。
+继续讨论如何配置模型。
+这里的会话校验串 abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKL 也不是 API Key。
+"""
+        self.assertEqual(core.parse_import_text(chat), [])
+
+    def test_parse_import_accepts_raw_url_and_token_on_same_line(self):
+        parsed = core.parse_import_text("https://gateway.example/v1 token-value-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJK")
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]["base_url"], "https://gateway.example/v1")
 
     def test_export_roundtrip_fields(self):
         entry = {"name": "n", "base_url": "https://example.com/v1", "api_key": "sk-demo-key-xx", "check_model": "m"}
@@ -214,6 +263,7 @@ class DbTests(unittest.TestCase):
         self.assertEqual(row["models"], [])
         self.assertIsNone(row["last_check_at"])
         self.assertEqual(row["model_status"], "unknown")
+        self.assertEqual(row["model_verification_version"], 0)
 
     def test_reorder_keys_persists_list_order(self):
         first = db.add_key({"base_url": "https://a.example", "api_key": "sk-a"})
@@ -238,6 +288,42 @@ class DbTests(unittest.TestCase):
         self.assertEqual(skipped, 1)
         self.assertEqual(len(ids), 1)
         self.assertNotEqual(ids[0], first)
+
+    def test_cursor_page_is_masked_filtered_and_has_summary(self):
+        ids = [db.add_key({"name": f"key-{index}", "base_url": f"https://{index}.example", "api_key": f"sk-{index}"})
+               for index in range(4)]
+        for index, key_id in enumerate(ids):
+            db.update_status(key_id, "up" if index % 2 == 0 else "down", index + 1, "")
+        first = db.list_keys_page(limit=2)
+        self.assertEqual(len(first["items"]), 2)
+        self.assertTrue(first["next_cursor"])
+        self.assertEqual(first["total"], 4)
+        self.assertEqual(first["summary"]["up"], 2)
+        self.assertNotIn("api_key", first["items"][0])
+        second = db.list_keys_page(limit=2, cursor=first["next_cursor"])
+        self.assertEqual(len(second["items"]), 2)
+        self.assertFalse(second["next_cursor"])
+        self.assertEqual({row["id"] for row in first["items"] + second["items"]}, set(ids))
+        filtered = db.list_keys_page(limit=10, status_filter="up", search="key")
+        self.assertEqual(filtered["total"], 2)
+        self.assertEqual(len(filtered["items"]), 2)
+
+    def test_cursor_page_rejects_invalid_cursor_and_filter(self):
+        db.add_key({"base_url": "https://a.example", "api_key": "sk-a"})
+        with self.assertRaisesRegex(ValueError, "invalid page cursor"):
+            db.list_keys_page(cursor="not-a-cursor")
+        with self.assertRaisesRegex(ValueError, "invalid status filter"):
+            db.list_keys_page(status_filter="anything")
+
+    def test_move_key_before_does_not_need_full_client_order(self):
+        first = db.add_key({"base_url": "https://a.example", "api_key": "sk-a"})
+        second = db.add_key({"base_url": "https://b.example", "api_key": "sk-b"})
+        third = db.add_key({"base_url": "https://c.example", "api_key": "sk-c"})
+        self.assertTrue(db.move_key_before(first, third))
+        # New keys start at the top: [third, second, first]. Moving `first`
+        # before `third` therefore produces [first, third, second] without
+        # requiring the browser to send every id.
+        self.assertEqual([row["id"] for row in db.list_keys()], [first, third, second])
 
 
     def test_public_list_masks_api_key(self):
@@ -340,7 +426,7 @@ class DbTests(unittest.TestCase):
                 key_columns = {row[1] for row in conn.execute("PRAGMA table_info(tbl_keys)")}
             self.assertTrue({"tbl_keys", "tbl_settings", "tbl_users", "tbl_sessions"} <= tables)
             self.assertFalse({"keys", "settings", "users", "sessions"} & tables)
-            self.assertTrue({"openai_status", "anthropic_status"} <= key_columns)
+            self.assertTrue({"openai_status", "anthropic_status", "model_verification_version", "next_check_at"} <= key_columns)
             self.assertEqual(db.get_key(7)["api_key"], "sk-legacy")
             self.assertEqual(db.get_key(7)["models"], ["model-a"])
             self.assertEqual(db.get_all_settings()["custom"], "preserved")

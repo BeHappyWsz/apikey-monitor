@@ -16,7 +16,7 @@ Server state is re-fetched; the client is not offline-first.
 
 ```javascript
 const state = {
-  keys: [],                 // last GET /api/keys payload (masked)
+  keys: [],                 // loaded masked rows for the active server-side page sequence
   selected: new Set(),      // selected key ids
   status: "all",            // filter: all | up | down | auth_error | unknown | problem | issue | ...
   query: "",                // search string
@@ -32,7 +32,13 @@ const state = {
   settings: {},             // GET /api/settings
   runtime: {},              // from health (pid/host/port/version) when loaded
   draggingId: null,
-  fingerprint: "",          // keysFingerprint(keys) for silent refresh short-circuit
+  fingerprint: "",          // keysFingerprint(keys) for rendered rows
+  nextCursor: "",           // opaque next page cursor from GET /api/keys/page
+  hasMore: false,
+  total: 0,                 // total matching active status + query
+  summary: {},              // status counters matching query, before status filter
+  pageLoading: false,
+  refreshPending: false,    // revision changed; wait for user to refresh first page
 };
 ```
 
@@ -70,17 +76,25 @@ Do **not** store API keys in `localStorage` / `sessionStorage`.
 
 - `problem` ? not `up` (includes `down`, `auth_error`, `unknown`, plus reserved labels).
 - `issue` currently targets `rate_limited` / `degraded` (reserved for future probe statuses).
-- Search matches `name`, `base_url`, `check_model`, `notes`, and `models[]`.
+- Status and search are sent to the page endpoint after a short input debounce;
+  do not reintroduce client-only filtering over an assumed complete `keys`
+  collection.
 
 ---
 
 ## Load / refresh loop
 
-`load({ silent })` in `app.js`:
+`load({ silent, append })` in `app.js`:
 
-1. Uses `request(..., { latest: true })` so older in-flight list fetches abort/ignore.
-2. Computes `keysFingerprint`; if `silent` and fingerprint unchanged and no `checking`, skips full list re-render (still refreshes stats/selection chrome).
-3. `preserveUi` path captures open `<details>`, scroll, focus around re-render.
+1. An explicit load fetches `GET /api/keys/page?limit=50&status=&q=` and
+   replaces the loaded rows. `append: true` sends `nextCursor` and appends only
+   the next page.
+2. Uses `request(..., { latest: true })` so older in-flight list fetches abort/ignore.
+3. A silent refresh only asks `GET /api/keys/revision`. If it changed, set
+   `refreshPending` and show an explicit refresh action; do not replace a
+   scrolled list in the background.
+4. `preserveUi` path captures open `<details>`, scroll, focus around append
+   renders.
 
 UI poll interval: `settings.ui_refresh_interval_sec` (`0` disables). After mutations, call `load()` (non-silent as appropriate).
 
@@ -97,6 +111,8 @@ UI poll interval: `settings.ui_refresh_interval_sec` (`0` disables). After mutat
 ## Selection & batch UX
 
 - Batch actions disabled when selection empty.
+- Select-all covers loaded rows only. It must not imply that unloaded matching
+  rows are selected.
 - Reorder POST `/api/keys/reorder` must send the full desired id order; only when `canReorder` is true in UI.
 - Import preview uses `candidates` / `candidateSelected`, separate from main list selection.
 

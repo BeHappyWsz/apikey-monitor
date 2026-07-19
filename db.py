@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """SQLite and JSON configuration persistence."""
+import base64
 import json
 import os
 import re
@@ -307,7 +308,9 @@ def _migrate(conn):
     cols = {row[1] for row in conn.execute("PRAGMA table_info(tbl_keys)")}
     for col, decl in (("check_model", "TEXT DEFAULT ''"), ("model_status", "TEXT DEFAULT 'unknown'"),
                       ("model_latency_ms", "INTEGER"), ("model_last_check_at", "INTEGER"),
-                      ("model_last_error", "TEXT DEFAULT ''"), ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''"),
+                      ("model_last_error", "TEXT DEFAULT ''"), ("model_verification_version", "INTEGER DEFAULT 0"),
+                      ("next_check_at", "INTEGER DEFAULT 0"),
+                      ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''"),
                       ("openai_status", "TEXT DEFAULT 'unknown'"), ("anthropic_status", "TEXT DEFAULT 'unknown'")):
         if col not in cols:
             conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {col} {decl}")
@@ -315,7 +318,7 @@ def _migrate(conn):
     if "name" not in settings_cols:
         conn.execute("ALTER TABLE tbl_settings ADD COLUMN name TEXT NOT NULL DEFAULT ''")
     _backfill_setting_names(conn)
-    conn.execute("PRAGMA user_version=8")
+    conn.execute("PRAGMA user_version=10")
     conn.execute("DELETE FROM tbl_settings WHERE k = 'webdav_last_sync'")
     _to_row = conn.execute("SELECT v FROM tbl_settings WHERE k='request_timeout_sec'").fetchone()
     if _to_row and str(_to_row["v"]) == "15":
@@ -399,6 +402,8 @@ def init_db():
             monitor_enabled INTEGER DEFAULT 1, interval_sec INTEGER, notes TEXT DEFAULT '',
             created_at INTEGER, check_model TEXT DEFAULT '', model_status TEXT DEFAULT 'unknown',
             model_latency_ms INTEGER, model_last_check_at INTEGER, model_last_error TEXT DEFAULT '',
+            model_verification_version INTEGER DEFAULT 0,
+            next_check_at INTEGER DEFAULT 0,
             sort_order INTEGER DEFAULT 0, check_path TEXT DEFAULT ''
         )""")
         conn.execute("CREATE TABLE IF NOT EXISTS tbl_settings (k TEXT PRIMARY KEY, v TEXT, name TEXT NOT NULL DEFAULT '')")
@@ -413,6 +418,7 @@ def init_db():
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON tbl_sessions(expires_at)")
         _migrate(conn)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_keys_monitor_next ON tbl_keys(monitor_enabled,next_check_at,last_check_at,id)")
         if conn.execute("SELECT 1 FROM tbl_settings LIMIT 1").fetchone() is None:
             conn.executemany("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?)", _setting_rows(_load_defaults()))
 
@@ -421,7 +427,7 @@ def _init_mysql():
     with connection(write=True) as conn:
         _migrate_table_names_mysql(conn)
         statements = [
-            """CREATE TABLE IF NOT EXISTS tbl_keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,openai_status VARCHAR(32) DEFAULT 'unknown',anthropic_status VARCHAR(32) DEFAULT 'unknown',models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,sort_order BIGINT DEFAULT 0,check_path TEXT,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at)) CHARACTER SET utf8mb4""",
+            """CREATE TABLE IF NOT EXISTS tbl_keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,openai_status VARCHAR(32) DEFAULT 'unknown',anthropic_status VARCHAR(32) DEFAULT 'unknown',models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,model_verification_version TINYINT DEFAULT 0,next_check_at BIGINT DEFAULT 0,sort_order BIGINT DEFAULT 0,check_path TEXT,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at),INDEX idx_keys_monitor_next (monitor_enabled,next_check_at,last_check_at,id)) CHARACTER SET utf8mb4""",
             "CREATE TABLE IF NOT EXISTS tbl_settings (k VARCHAR(191) PRIMARY KEY,v LONGTEXT,name VARCHAR(255) NOT NULL DEFAULT '') CHARACTER SET utf8mb4",
             "CREATE TABLE IF NOT EXISTS tbl_users (id BIGINT PRIMARY KEY AUTO_INCREMENT,username VARCHAR(64) NOT NULL UNIQUE,password_hash TEXT NOT NULL,must_change_password TINYINT DEFAULT 0,enabled TINYINT NOT NULL DEFAULT 1,created_at BIGINT NOT NULL) CHARACTER SET utf8mb4",
             "CREATE TABLE IF NOT EXISTS tbl_sessions (token_hash CHAR(64) PRIMARY KEY,user_id BIGINT NOT NULL,csrf_token TEXT NOT NULL,created_at BIGINT NOT NULL,expires_at BIGINT NOT NULL,last_seen_at BIGINT NOT NULL,INDEX idx_sessions_expires_at(expires_at),FOREIGN KEY(user_id) REFERENCES tbl_users(id) ON DELETE CASCADE) CHARACTER SET utf8mb4",
@@ -438,9 +444,15 @@ def _init_mysql():
         key_columns = {row["COLUMN_NAME"] for row in conn.execute(
             "SELECT COLUMN_NAME FROM information_schema.columns "
             "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}
-        for column in ("openai_status", "anthropic_status"):
+        for column in ("openai_status", "anthropic_status", "model_verification_version", "next_check_at"):
             if column not in key_columns:
-                conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {column} VARCHAR(32) DEFAULT 'unknown'")
+                declaration = "BIGINT DEFAULT 0" if column == "next_check_at" else ("TINYINT DEFAULT 0" if column == "model_verification_version" else "VARCHAR(32) DEFAULT 'unknown'")
+                conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {column} {declaration}")
+        index_names = {row["INDEX_NAME"] for row in conn.execute(
+            "SELECT INDEX_NAME FROM information_schema.statistics "
+            "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}
+        if "idx_keys_monitor_next" not in index_names:
+            conn.execute("CREATE INDEX idx_keys_monitor_next ON tbl_keys(monitor_enabled,next_check_at,last_check_at,id)")
         settings_columns = {row["COLUMN_NAME"] for row in conn.execute(
             "SELECT COLUMN_NAME FROM information_schema.columns "
             "WHERE table_schema=DATABASE() AND table_name='tbl_settings'")}
@@ -617,6 +629,120 @@ def list_keys(public=False):
     return rows
 
 
+_PAGE_STATUSES = {
+    "all": (), "up": ("up",), "down": ("down",), "auth_error": ("auth_error",),
+    "unknown": ("unknown",), "issue": ("rate_limited", "degraded"),
+    "problem": ("down", "auth_error", "rate_limited", "degraded", "unknown"),
+}
+
+
+def _page_cursor_encode(group, sort_order, key_id):
+    raw = json.dumps([int(group), int(sort_order), int(key_id)], separators=(",", ":")).encode("ascii")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _page_cursor_decode(value):
+    if not value:
+        return None
+    try:
+        padded = str(value) + "=" * (-len(str(value)) % 4)
+        group, sort_order, key_id = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+        if group not in (0, 1) or int(key_id) <= 0:
+            raise ValueError
+        return int(group), int(sort_order), int(key_id)
+    except Exception as exc:
+        raise ValueError("invalid page cursor") from exc
+
+
+def _page_conditions(status_filter="all", search=""):
+    if status_filter not in _PAGE_STATUSES:
+        raise ValueError("invalid status filter")
+    conditions, values = [], []
+    statuses = _PAGE_STATUSES[status_filter]
+    if statuses:
+        conditions.append("status IN (" + ",".join("?" for _ in statuses) + ")")
+        values.extend(statuses)
+    term = str(search or "").strip().lower()
+    if term:
+        like = f"%{term}%"
+        conditions.append("(LOWER(COALESCE(name,'')) LIKE ? OR LOWER(COALESCE(base_url,'')) LIKE ? "
+                          "OR LOWER(COALESCE(check_model,'')) LIKE ? OR LOWER(COALESCE(notes,'')) LIKE ? "
+                          "OR LOWER(COALESCE(models,'')) LIKE ?)")
+        values.extend([like] * 5)
+    return conditions, values
+
+
+def _page_summary(conn, conditions, values):
+    where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+    rows = conn.execute(f"SELECT status, COUNT(*) AS c FROM tbl_keys{where} GROUP BY status", values).fetchall()
+    latency_row = conn.execute(f"SELECT AVG(latency_ms) AS average_latency_ms FROM tbl_keys{where}", values).fetchone()
+    counts = {str(row["status"] or "unknown"): int(row["c"]) for row in rows}
+    total = sum(counts.values())
+    return {
+        "all": total,
+        "up": counts.get("up", 0),
+        "down": counts.get("down", 0),
+        "auth_error": counts.get("auth_error", 0),
+        "unknown": counts.get("unknown", 0),
+        "issue": counts.get("rate_limited", 0) + counts.get("degraded", 0),
+        "problem": total - counts.get("up", 0),
+        "avg_latency_ms": round(float(latency_row["average_latency_ms"])) if latency_row["average_latency_ms"] is not None else None,
+    }
+
+
+def list_keys_page(limit=50, cursor="", status_filter="all", search=""):
+    """Return one stable-order public page without shipping the entire key list."""
+    limit = max(1, min(int(limit), 100))
+    facet_conditions, facet_values = _page_conditions("all", search)
+    base_conditions, base_values = _page_conditions(status_filter, search)
+    cursor_parts = _page_cursor_decode(cursor)
+    conditions, values = list(base_conditions), list(base_values)
+    order_group = "CASE WHEN sort_order=0 THEN 1 ELSE 0 END"
+    if cursor_parts:
+        group, sort_order, key_id = cursor_parts
+        conditions.append(f"({order_group}>? OR ({order_group}=? AND (sort_order>? OR (sort_order=? AND id<?))))")
+        values.extend([group, group, sort_order, sort_order, key_id])
+    where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+    base_where = (" WHERE " + " AND ".join(base_conditions)) if base_conditions else ""
+    with connection() as conn:
+        rows = [_row_to_dict(row) for row in conn.execute(
+            f"SELECT * FROM tbl_keys{where} ORDER BY {order_group} ASC, sort_order ASC, id DESC LIMIT ?",
+            [*values, limit + 1]).fetchall()]
+        summary = _page_summary(conn, facet_conditions, facet_values)
+        total_row = conn.execute(f"SELECT COUNT(*) AS c FROM tbl_keys{base_where}", base_values).fetchone()
+        total = int(total_row["c"])
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor = ""
+    if has_more and items:
+        last = items[-1]
+        next_cursor = _page_cursor_encode(1 if int(last.get("sort_order") or 0) == 0 else 0,
+                                           int(last.get("sort_order") or 0), int(last["id"]))
+    return {"items": [public_key(row) for row in items], "next_cursor": next_cursor,
+            "total": total,
+            "summary": summary, "revision": get_list_revision()}
+
+
+def move_key_before(key_id, before_id=None):
+    """Move one key before another without requiring the browser to own all ids."""
+    key_id = int(key_id)
+    before_id = int(before_id) if before_id not in (None, "", 0) else None
+    with connection(write=True) as conn:
+        ids = [row["id"] for row in conn.execute(
+            "SELECT id FROM tbl_keys ORDER BY CASE WHEN sort_order=0 THEN 1 ELSE 0 END, sort_order ASC, id DESC")]
+        if key_id not in ids:
+            return False
+        ids.remove(key_id)
+        if before_id is not None and before_id in ids:
+            ids.insert(ids.index(before_id), key_id)
+        else:
+            ids.append(key_id)
+        for index, item_id in enumerate(ids, start=1):
+            conn.execute("UPDATE tbl_keys SET sort_order=? WHERE id=?", (index * 10, item_id))
+    touch_list_generation()
+    return True
+
+
 def get_key(key_id, public=False):
     cache_name = f"{_PUBLIC_KEY_CACHE_PREFIX}{int(key_id)}"
     if public:
@@ -711,7 +837,11 @@ def update_key(key_id, data):
     if "base_url" in data or "api_key" in data:
         fields.extend(["status='unknown'", "supports_openai=0", "supports_anthropic=0", "openai_status='unknown'", "anthropic_status='unknown'", "models='[]'",
                        "latency_ms=NULL", "last_check_at=NULL", "last_error=''", "model_status='unknown'",
-                       "model_latency_ms=NULL", "model_last_check_at=NULL", "model_last_error=''"])
+                       "model_latency_ms=NULL", "model_last_check_at=NULL", "model_last_error=''", "model_verification_version=0", "next_check_at=0"])
+    elif "monitor_enabled" in data or "interval_sec" in data:
+        # A newly enabled key or changed cadence should be reconsidered without
+        # waiting for the previous schedule to expire.
+        fields.append("next_check_at=0")
     with connection(write=True) as conn:
         cur = conn.execute(f"UPDATE tbl_keys SET {', '.join(fields)} WHERE id=?", (*values, key_id))
         ok = cur.rowcount > 0
@@ -732,7 +862,7 @@ def delete_keys(ids):
 
 
 def update_status(key_id, status, latency_ms, error, supports_anthropic=None, supports_openai=None, models=None,
-                  openai_status=None, anthropic_status=None):
+                  openai_status=None, anthropic_status=None, next_check_at=None):
     sets = ["status=?", "latency_ms=?", "last_error=?", "last_check_at=?"]
     values = [status, latency_ms, (error or "")[:300], int(time.time())]
     if supports_anthropic is not None:
@@ -745,38 +875,61 @@ def update_status(key_id, status, latency_ms, error, supports_anthropic=None, su
         sets.append("openai_status=?"); values.append(openai_status)
     if anthropic_status is not None:
         sets.append("anthropic_status=?"); values.append(anthropic_status)
+    if next_check_at is not None:
+        sets.append("next_check_at=?"); values.append(int(next_check_at))
     with connection(write=True) as conn:
         conn.execute(f"UPDATE tbl_keys SET {', '.join(sets)} WHERE id=?", (*values, key_id))
     touch_list_generation()
 
 
-def update_model_status(key_id, status, latency_ms, error):
+def update_model_status(key_id, status, latency_ms, error, verification_version=1):
     with connection(write=True) as conn:
         conn.execute("""UPDATE tbl_keys SET model_status=?, model_latency_ms=?, model_last_error=?,
-                      model_last_check_at=? WHERE id=?""",
-                     (status, latency_ms, (error or "")[:300], int(time.time()), key_id))
+                      model_last_check_at=?, model_verification_version=? WHERE id=?""",
+                     (status, latency_ms, (error or "")[:300], int(time.time()), verification_version, key_id))
     touch_list_generation()
 
 
-def get_due_keys(now, up_interval, down_interval, limit=None):
-    """Return monitor-enabled keys that are due, oldest last_check_at first.
+def monitor_next_check_at(entry, status, settings, checked_at=None):
+    """Calculate a paced next monitor time without retaining a failure counter.
 
-    limit: optional max rows (used by monitor tick cap / jitter-by-batch).
+    The status itself supplies a conservative, bounded backoff. A small
+    deterministic jitter avoids an import of many keys creating a request herd
+    on the same future second.
     """
+    checked_at = int(time.time() if checked_at is None else checked_at)
+    global_interval = max(30, int(settings.get("global_interval_sec", 300) or 300))
+    down_interval = max(30, int(settings.get("down_recheck_interval_sec", 120) or 120))
+    interval = int(entry.get("interval_sec") or global_interval)
+    if not entry.get("interval_sec") and status == "down":
+        interval = down_interval
+    if status == "degraded":
+        interval = max(interval * 2, 600)
+    elif status == "rate_limited":
+        interval = max(interval * 4, 900)
+    elif status == "auth_error":
+        interval = max(interval * 12, 21600)
+    spread = max(1, interval // 20)
+    key_id = int(entry.get("id") or 0)
+    jitter = ((key_id * 1103515245 + 12345) % (spread * 2 + 1)) - spread
+    return checked_at + max(1, interval + jitter)
+
+
+def get_due_keys(now, up_interval=None, down_interval=None, limit=None):
+    """Return only due monitor rows through the indexed next-check schedule.
+
+    `up_interval` and `down_interval` remain accepted for compatibility with
+    existing callers; each result write now persists its own next due time.
+    """
+    try:
+        cap = max(0, int(limit)) if limit is not None else 1000
+    except (TypeError, ValueError):
+        cap = 1000
+    if not cap:
+        return []
     with connection() as conn:
-        rows = conn.execute("SELECT * FROM tbl_keys WHERE monitor_enabled=1").fetchall()
-    due = []
-    for row in rows:
-        item = _row_to_dict(row)
-        interval = item.get("interval_sec") or (down_interval if item["status"] == "down" else up_interval)
-        if now - (item.get("last_check_at") or 0) >= int(interval):
-            due.append(item)
-    due.sort(key=lambda item: (item.get("last_check_at") or 0, item.get("id") or 0))
-    if limit is not None:
-        try:
-            limit = int(limit)
-        except (TypeError, ValueError):
-            limit = None
-        if limit is not None and limit >= 0:
-            due = due[:limit]
-    return due
+        rows = conn.execute(
+            "SELECT * FROM tbl_keys WHERE monitor_enabled=1 AND next_check_at<=? "
+            "ORDER BY next_check_at ASC,last_check_at ASC,id ASC LIMIT ?",
+            (int(now), cap)).fetchall()
+    return [_row_to_dict(row) for row in rows]

@@ -42,7 +42,7 @@ class MySqlRedisIntegrationTests(unittest.TestCase):
                 "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}
         self.assertTrue({"tbl_keys", "tbl_settings", "tbl_users", "tbl_sessions"} <= tables)
         self.assertTrue({"k", "v", "name"} <= setting_columns)
-        self.assertTrue({"openai_status", "anthropic_status"} <= key_columns)
+        self.assertTrue({"openai_status", "anthropic_status", "next_check_at"} <= key_columns)
 
         self.key_id = db.add_key({
             "name": self.marker,

@@ -127,6 +127,14 @@ def route(method, path, query, body, server, request=None):
             raise ApiError(400, "invalid_user", str(exc))
     if method == "GET" and path == "/api/keys":
         return 200, KEYS.list()
+    if method == "GET" and path == "/api/keys/page":
+        params = parse_qs(query)
+        try:
+            limit = int(params.get("limit", ["50"])[0])
+            return 200, KEYS.page(limit, params.get("cursor", [""])[0],
+                                  params.get("status", ["all"])[0], params.get("q", [""])[0])
+        except ValueError as exc:
+            raise ApiError(400, "invalid_page", str(exc))
     if method == "GET" and path == "/api/keys/revision":
         return 200, {"revision": db.get_list_revision()}
     if method == "GET" and path == "/api/settings":
@@ -183,6 +191,18 @@ def route(method, path, query, body, server, request=None):
         try: ids = validators.ids_payload(body)
         except ValueError as exc: raise ApiError(400, "invalid_ids", str(exc))
         return 200, {"ids": KEYS.reorder(ids)}
+    if method == "POST" and path == "/api/keys/move":
+        try:
+            key_id = int((body or {}).get("id"))
+            before_id = (body or {}).get("before_id")
+            if key_id <= 0:
+                raise ValueError
+            moved = KEYS.move_before(key_id, before_id)
+        except (TypeError, ValueError):
+            raise ApiError(400, "invalid_move", "id and before_id must be positive ids")
+        if not moved:
+            raise ApiError(404, "key_not_found", "Key 不存在")
+        return 200, {"id": key_id, "before_id": before_id}
     if method == "POST" and path in ("/api/keys/batch_delete", "/api/keys/batch_check"):
         try: ids = validators.ids_payload(body)
         except ValueError as exc: raise ApiError(400, "invalid_ids", str(exc))

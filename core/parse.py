@@ -14,6 +14,8 @@ _ASSIGN_RE = re.compile(
 _BEARER_RE = re.compile(r"[Bb]earer\s+([A-Za-z0-9_\-.]{16,})")
 _SK_RE = re.compile(r"sk-[A-Za-z0-9_\-.]{8,}")
 _LONG_RE = re.compile(r"(?<![A-Za-z0-9_\-.])[A-Za-z0-9_\-.]{40,}")
+_FENCED_JSON_RE = re.compile(r"```(?:json)?\s*([\[{][\s\S]*?[\]}])\s*```", re.IGNORECASE)
+_MAX_URL_KEY_GAP = 4
 
 
 def _normalize_import_items(data):
@@ -78,6 +80,22 @@ def try_parse_json_import(text: str):
     return None
 
 
+def try_parse_fenced_json_import(text: str):
+    """Accept a JSON backup embedded in explanatory Markdown or chat text."""
+    out, seen = [], set()
+    for block in _FENCED_JSON_RE.findall(str(text or "")):
+        try:
+            items = _normalize_import_items(json.loads(block))
+        except json.JSONDecodeError:
+            continue
+        for item in items:
+            marker = (item["base_url"], item["api_key"])
+            if marker not in seen:
+                seen.add(marker)
+                out.append(item)
+    return out or None
+
+
 def _clean_base(url: str) -> str:
     try:
         return normalize_base_url(url)
@@ -85,15 +103,16 @@ def _clean_base(url: str) -> str:
         return ""
 
 
-def _find_keys(text: str):
+def _find_keys(text: str, allow_unlabeled_long=False):
     found = []
     found.extend(m.group(1) for m in _BEARER_RE.finditer(text))
     for m in _ASSIGN_RE.finditer(text):
-        key, value = m.group("key").lower(), m.group("val").strip().strip("\"'")
+        key = m.group("key").lower()
+        value = m.group("val").strip().strip("\"'`)]}")
         if "url" not in key and "endpoint" not in key and not value.lower().startswith("http"):
             found.append(value)
     found.extend(m.group(0) for m in _SK_RE.finditer(text))
-    if not found:
+    if not found and allow_unlabeled_long:
         found.extend(m.group(0) for m in _LONG_RE.finditer(text) if not m.group(0).lower().startswith("http"))
     seen, out = set(), []
     for value in found:
@@ -106,31 +125,26 @@ def _find_keys(text: str):
 def parse_paste(text: str):
     if not text or not text.strip():
         return []
-    entries, pending_url = [], None
+    entries, pending_url, pending_age = [], None, 0
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        urls = [u for u in (_clean_base(v) for v in _URL_RE.findall(line)) if u]
-        keys = _find_keys(line)
+        urls = [u for u in (_clean_base(v.rstrip(".,;:!?)]}")) for v in _URL_RE.findall(line)) if u]
+        keys = _find_keys(line, allow_unlabeled_long=bool(urls))
         line_url = urls[0] if urls else None
         if line_url and keys:
             entries.extend({"base_url": line_url, "api_key": key, "name": ""} for key in keys)
-            pending_url = None
+            pending_url, pending_age = None, 0
         elif line_url:
-            pending_url = line_url
-        elif keys and pending_url:
+            pending_url, pending_age = line_url, 0
+        elif keys and pending_url and pending_age <= _MAX_URL_KEY_GAP:
             entries.extend({"base_url": pending_url, "api_key": key, "name": ""} for key in keys)
-            pending_url = None
-    if not entries:
-        urls = list(dict.fromkeys(filter(None, (_clean_base(v) for v in _URL_RE.findall(text)))))
-        keys = _find_keys(text)
-        if len(urls) == len(keys) and urls:
-            entries.extend({"base_url": u, "api_key": k, "name": ""} for u, k in zip(urls, keys))
-        elif len(urls) == 1:
-            entries.extend({"base_url": urls[0], "api_key": k, "name": ""} for k in keys)
-        elif len(keys) == 1:
-            entries.extend({"base_url": u, "api_key": keys[0], "name": ""} for u in urls)
+            pending_url, pending_age = None, 0
+        elif pending_url:
+            pending_age += 1
+            if pending_age > _MAX_URL_KEY_GAP:
+                pending_url = None
     seen, out = set(), []
     for item in entries:
         marker = (item["base_url"], item["api_key"])
@@ -142,6 +156,7 @@ def parse_paste(text: str):
 
 IMPORTERS = (
     try_parse_json_import,
+    try_parse_fenced_json_import,
     parse_paste,
 )
 

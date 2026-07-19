@@ -2,8 +2,10 @@ import { getVisibleKeys, selectionSummary } from "./state.js";
 import { renderCard, captureListUi, restoreListUi } from "./cards.js";
 import { $, $$, esc } from "./utils.js";
 
-export function createListUi({ state, load }) {
+export function createListUi({ state, load, loadMore }) {
+  let pageObserver = null;
   function countStatuses() {
+    if (state.summary && Object.keys(state.summary).length) return state.summary;
     const counts = { all: state.keys.length, up: 0, down: 0, auth_error: 0, issue: 0, problem: 0, unknown: 0 };
     state.keys.forEach((key) => {
       const status = key.status || "unknown";
@@ -18,6 +20,15 @@ export function createListUi({ state, load }) {
 
   function renderStats() {
     const counts = countStatuses();
+    if (state.summary && Object.keys(state.summary).length) {
+      $("#st-total").textContent = counts.all || 0;
+      $("#st-up").textContent = counts.up || 0;
+      $("#st-down").textContent = counts.down || 0;
+      $("#st-auth").textContent = counts.auth_error || 0;
+      $("#st-issue").textContent = counts.issue || 0;
+      $("#st-avg").textContent = counts.avg_latency_ms == null ? "—" : `${counts.avg_latency_ms}ms`;
+      return;
+    }
     let latencySum = 0, latencyN = 0;
     state.keys.forEach((key) => {
       if (key.latency_ms != null) { latencySum += key.latency_ms; latencyN++; }
@@ -52,7 +63,9 @@ export function createListUi({ state, load }) {
 
   function updateBatchActions() {
     const hasSel = state.selected.size > 0;
-    const hasKeys = state.keys.length > 0;
+    // `total` is scoped to the active server-side filter. Backup remains
+    // available when that filter has no matches but the account still has keys.
+    const hasKeys = Number(state.summary?.all || 0) > 0;
     setBtnDisabled($("#btn-check"), !hasSel, "请先勾选要检测的项目");
     setBtnDisabled($("#btn-export-selected"), !hasSel, "请先勾选要导出的项目");
     setBtnDisabled($("#btn-delete"), !hasSel, "请先勾选要删除的项目");
@@ -92,9 +105,22 @@ export function createListUi({ state, load }) {
       renderSelection();
       return;
     }
-    const rows = getVisibleKeys(state.keys, state.status, state.query);
-    list.innerHTML = rows.map((key) => renderCard(key, state)).join("");
-    if (!state.keys.length) {
+    const rows = state.keys;
+    const cards = rows.map((key) => renderCard(key, state)).join("");
+    const pending = state.refreshPending ? `<button class="btn ghost js-page-refresh" type="button">发现更新，刷新列表</button>` : "";
+    const more = state.hasMore ? `<button class="btn js-load-more" type="button" ${state.pageLoading ? "disabled" : ""}>${state.pageLoading ? "加载中…" : "加载更多"}</button>` : "";
+    list.innerHTML = cards + (state.total ? `<div class="page-load"><span>已加载 ${state.keys.length} / ${state.total}</span>${pending}${more}</div>` : "");
+    $(".js-load-more", list)?.addEventListener("click", () => loadMore());
+    $(".js-page-refresh", list)?.addEventListener("click", () => load());
+    pageObserver?.disconnect();
+    const moreButton = $(".js-load-more", list);
+    if (moreButton && "IntersectionObserver" in window) {
+      pageObserver = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadMore();
+      }, { rootMargin: "360px 0px" });
+      pageObserver.observe(moreButton);
+    }
+    if (!state.total && !Number(state.summary?.all || 0)) {
       empty.hidden = false;
       empty.querySelector(".empty-title").textContent = "还没有 Key";
       if (empty.querySelector(".empty-desc")) empty.querySelector(".empty-desc").textContent = "三步开始：粘贴配置 → 预览确认 → 自动检测。支持环境变量 / curl / JSON 备份，也可手动添加。";

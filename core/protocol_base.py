@@ -57,3 +57,36 @@ def _record_http(result, code, raw, ms, err, success_codes=(200,), validation_40
         result.update(endpoint_exists=True, status="degraded", error=err or f"HTTP {code}")
     elif err:
         result["error"] = err
+
+
+def model_response_error(protocol, raw):
+    """Return a stable error unless a minimal generated-text response is valid.
+
+    A transport-level 200 is insufficient for a strict usability check: some
+    gateways return HTML, a proxy envelope, or an empty JSON object while
+    reporting success.  Keep the validation deliberately small and protocol
+    specific so it proves that the requested chat/messages operation produced
+    text without coupling the monitor to provider-specific optional fields.
+    """
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return f"invalid {protocol} model response JSON"
+    if protocol == "openai":
+        choices = payload.get("choices") if isinstance(payload, dict) else None
+        if isinstance(choices, list):
+            for choice in choices:
+                message = choice.get("message") if isinstance(choice, dict) else None
+                content = message.get("content") if isinstance(message, dict) else None
+                if isinstance(content, str) and content.strip():
+                    return ""
+        return "invalid OpenAI completion response"
+    if protocol == "anthropic":
+        blocks = payload.get("content") if isinstance(payload, dict) else None
+        if isinstance(blocks, list):
+            for block in blocks:
+                if (isinstance(block, dict) and block.get("type") == "text"
+                        and isinstance(block.get("text"), str) and block["text"].strip()):
+                    return ""
+        return "invalid Anthropic message response"
+    return "unsupported strict model verification protocol"

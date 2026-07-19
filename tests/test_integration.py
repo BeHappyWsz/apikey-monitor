@@ -90,6 +90,12 @@ class IntegrationTests(unittest.TestCase):
         headers = self.login_headers(port)
         status, data = json_request("GET", f"http://127.0.0.1:{port}/api/keys", headers=headers)
         self.assertEqual((status, data), (200, []))
+        status, page = json_request("GET", f"http://127.0.0.1:{port}/api/keys/page?limit=50&status=all", headers=headers)
+        self.assertEqual(status, 200)
+        self.assertEqual(page["items"], [])
+        self.assertEqual(page["total"], 0)
+        self.assertFalse(page["next_cursor"])
+        self.assertEqual(page["summary"]["all"], 0)
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             json_request("POST", f"http://127.0.0.1:{port}/api/settings", {}, {"Cookie": headers["Cookie"]})
         self.assertEqual(ctx.exception.code, 403)

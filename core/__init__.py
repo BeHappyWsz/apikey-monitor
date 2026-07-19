@@ -16,7 +16,7 @@ from core.export import (
     parse_sync_payload,
 )
 from core.http import MAX_RESPONSE_BYTES, _read_limited, _request
-from core.parse import IMPORTERS, parse_import_text, parse_paste
+from core.parse import IMPORTERS, parse_import_text, parse_paste, try_parse_fenced_json_import
 from core.probe import classify, health_check, model_check
 from core.protocol_base import _extract_error_message, _protocol_result, _record_http
 from core.protocols import (
@@ -40,6 +40,7 @@ __all__ = [
     "probe_urls",
     "parse_import_text",
     "parse_paste",
+    "try_parse_fenced_json_import",
     "classify",
     "health_check",
     "model_check",

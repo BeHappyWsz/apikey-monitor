@@ -39,3 +39,10 @@ test("card hides stale protocol flags after failure",()=>{
   assert.doesNotMatch(html,/OpenAI/);
   assert.doesNotMatch(html,/Anthropic/);
 });
+test("card distinguishes strict model verification from protocol availability",()=>{
+  const unverified=renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",check_model:"gpt-test",model_status:"up",model_verification_version:0},cardState);
+  const verified=renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",check_model:"gpt-test",model_status:"up",model_last_check_at:1,model_verification_version:1},cardState);
+  assert.match(unverified,/未严格验证/);
+  assert.match(verified,/严格验证/);
+  assert.doesNotMatch(verified,/未严格验证/);
+});

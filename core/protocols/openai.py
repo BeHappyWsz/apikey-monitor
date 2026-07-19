@@ -5,7 +5,7 @@ import json
 from version import USER_AGENT
 
 from core import http as http_mod
-from core.protocol_base import _protocol_result, _record_http
+from core.protocol_base import _protocol_result, _record_http, model_response_error
 from core.urls import candidate_urls, probe_urls
 
 
@@ -49,14 +49,18 @@ def model_probe(base, api_key, model, timeout):
     }
     body = {
         "model": model,
-        "messages": [{"role": "user", "content": "hi"}],
-        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+        "max_tokens": 3,
         "stream": False,
     }
     probe_result = _protocol_result("openai")
     for url in candidate_urls(base, "chat/completions"):
         code, raw, ms, err = http_mod._request("POST", url, headers, body, timeout)
         _record_http(probe_result, code, raw, ms, err, validation_400=True)
+        if code == 200:
+            validation_error = model_response_error("openai", raw)
+            if validation_error:
+                probe_result.update(status="degraded", error=validation_error)
         if code not in (0, 404):
             break
     return probe_result

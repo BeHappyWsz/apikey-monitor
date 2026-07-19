@@ -62,7 +62,7 @@ class ProtocolSelectionTests(unittest.TestCase):
             calls.append(url)
             if "models" in url:
                 return 404, "", 1, "HTTP 404"
-            return 200, "{}", 2, None
+            return 200, '{"content":[{"type":"text","text":"OK"}]}', 2, None
 
         with patch("core.http._request", side_effect=fake_request):
             result = core.health_check(
@@ -152,7 +152,8 @@ class AnthropicRetryTests(unittest.TestCase):
         return calls, request
 
     def test_retries_5xx_then_succeeds(self):
-        calls, fake = self._fake([(502, "", 1, "HTTP 502"), (200, "{}", 5, None)])
+        calls, fake = self._fake([(502, "", 1, "HTTP 502"),
+                                  (200, '{"content":[{"type":"text","text":"OK"}]}', 5, None)])
         with patch("core.http._request", side_effect=fake):
             result = anthropic_mod.probe("https://example.com", "sk", 15)
         self.assertEqual(result["status"], "up")
@@ -161,7 +162,8 @@ class AnthropicRetryTests(unittest.TestCase):
 
     def test_retries_timeout_then_succeeds(self):
         # both candidate URLs time out in attempt 1; retry succeeds on attempt 2
-        calls, fake = self._fake([(0, "", 1, "timeout"), (0, "", 1, "timeout"), (200, "{}", 5, None)])
+        calls, fake = self._fake([(0, "", 1, "timeout"), (0, "", 1, "timeout"),
+                                  (200, '{"content":[{"type":"text","text":"OK"}]}', 5, None)])
         with patch("core.http._request", side_effect=fake):
             result = anthropic_mod.probe("https://example.com", "sk", 15)
         self.assertEqual(result["status"], "up")

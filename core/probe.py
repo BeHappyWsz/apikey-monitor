@@ -32,6 +32,10 @@ def _empty_result(error):
         "model_status": "unknown",
         "model_latency_ms": None,
         "model_error": None,
+        "model_verified": False,
+        "model_verification_version": 0,
+        "model_verified": False,
+        "model_verification_version": 0,
     }
 
 
@@ -119,7 +123,8 @@ def classify(base_url, api_key, timeout=15, check_model="", check_path=""):
 
 
 def model_check(base_url, api_key, model, supports_openai=False, supports_anthropic=False, timeout=15):
-    result = {"model_status": "unknown", "model_latency_ms": None, "model_error": None}
+    result = {"model_status": "unknown", "model_latency_ms": None, "model_error": None,
+              "model_verified": False, "model_verification_version": 1}
     try:
         base = normalize_base_url(base_url)
     except ValueError as exc:
@@ -137,7 +142,8 @@ def model_check(base_url, api_key, model, supports_openai=False, supports_anthro
         if model_probe:
             protocols.append(model_probe(base, api_key, model, timeout))
     status, latency, error = _aggregate(protocols or [_protocol_result("unknown")])
-    result.update(model_status=status, model_latency_ms=latency, model_error=error)
+    result.update(model_status=status, model_latency_ms=latency, model_error=error,
+                  model_verified=status == "up")
     return result
 
 

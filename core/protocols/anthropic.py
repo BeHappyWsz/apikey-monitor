@@ -3,7 +3,7 @@
 from version import USER_AGENT
 
 from core import http as http_mod
-from core.protocol_base import _protocol_result, _record_http
+from core.protocol_base import _protocol_result, _record_http, model_response_error
 from core.urls import candidate_urls, probe_urls
 
 
@@ -37,6 +37,10 @@ def probe(base, api_key, timeout, check_path=""):
         for url in urls:
             code, raw, ms, err = http_mod._request("POST", url, headers, body, timeout)
             _record_http(result, code, raw, ms, err, validation_400=True)
+            if code == 200:
+                validation_error = model_response_error("anthropic", raw)
+                if validation_error:
+                    result.update(status="degraded", error=validation_error)
             if code != 404 and code != 0:
                 break
         if result["status"] == "up" or not _is_transient(result["http_status"]):
@@ -53,13 +57,17 @@ def model_probe(base, api_key, model, timeout):
     }
     body = {
         "model": model,
-        "max_tokens": 1,
-        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 3,
+        "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
     }
     probe_result = _protocol_result("anthropic")
     for url in candidate_urls(base, "messages"):
         code, raw, ms, err = http_mod._request("POST", url, headers, body, timeout)
         _record_http(probe_result, code, raw, ms, err, validation_400=True)
+        if code == 200:
+            validation_error = model_response_error("anthropic", raw)
+            if validation_error:
+                probe_result.update(status="degraded", error=validation_error)
         if code not in (0, 404):
             break
     return probe_result

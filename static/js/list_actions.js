@@ -34,7 +34,7 @@ export function initListActions({
 
   async function checkOne(key, modelOnly) {
     if (modelOnly && !key.check_model) {
-      toast("请先设置检测模型");
+      toast("请先设置验证模型，严格验证会产生一次最小模型调用");
       return editor.openEdit(key);
     }
     state.checking.add(key.id);
@@ -118,7 +118,7 @@ export function initListActions({
     state.fingerprint = keysFingerprint(state.keys);
     render();
     try {
-      await api("POST", "/api/keys/reorder", { ids: state.keys.map((key) => key.id) });
+      await api("POST", "/api/keys/move", { id: sourceId, before_id: targetId });
       toast("顺序已保存");
     } catch {
       state.keys = previous;

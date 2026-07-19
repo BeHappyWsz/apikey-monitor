@@ -19,6 +19,7 @@ const state = {
   candidates: [], candidateSelected: new Set(), settings: {}, runtime: {}, draggingId: null,
   fingerprint: "",
   revision: "",
+  nextCursor: "", hasMore: false, total: 0, summary: {}, pageLoading: false, refreshPending: false,
 };
 
 async function api(method, path, body, options) {
@@ -33,56 +34,61 @@ async function api(method, path, body, options) {
 // listUi assigned after createListUi; load closes over listUi methods via getters below.
 const listUi = {};
 
-async function load({ silent = false } = {}) {
-  if (!silent) {
+function pagePath(cursor = "") {
+  const params = new URLSearchParams({ limit: "50", status: state.status || "all" });
+  if (state.query.trim()) params.set("q", state.query.trim());
+  if (cursor) params.set("cursor", cursor);
+  return `/api/keys/page?${params}`;
+}
+
+async function load({ silent = false, append = false } = {}) {
+  if (append && (!state.hasMore || state.pageLoading)) return;
+  if (!silent && !append) {
     state.loading = true;
     state.loadError = "";
     listUi.render();
   }
+  if (append) state.pageLoading = true;
   try {
-    // Silent path: cheap revision probe first — skip full list when unchanged.
+    // Polling only reports a new revision; it must not jump a scrolled list.
     if (silent && !state.checking.size) {
       try {
         const revResult = await request("GET", "/api/keys/revision", undefined, { latest: true });
         if (!revResult.isLatest()) return;
         const rev = String(revResult.payload?.revision || "");
         if (rev && rev === state.revision) return;
-      } catch {
-        // Fall through to full list load on revision errors.
-      }
+        state.refreshPending = true;
+        listUi.render({ preserveUi: true });
+        return;
+      } catch { return; }
     }
-    const result = await request("GET", "/api/keys", undefined, { latest: true });
+    const result = await request("GET", pagePath(append ? state.nextCursor : ""), undefined, { latest: true });
     if (!result.isLatest()) return;
-    const nextKeys = result.payload;
-    const nextFingerprint = keysFingerprint(nextKeys);
-    const unchanged = silent && nextFingerprint === state.fingerprint && !state.checking.size;
-    state.keys = nextKeys;
-    state.fingerprint = nextFingerprint;
+    const page = result.payload || {};
+    state.keys = append ? [...state.keys, ...(page.items || [])] : (page.items || []);
+    state.fingerprint = keysFingerprint(state.keys);
+    state.nextCursor = String(page.next_cursor || "");
+    state.hasMore = Boolean(page.next_cursor);
+    state.total = Number(page.total || 0);
+    state.summary = page.summary || {};
+    state.revision = String(page.revision || "");
+    state.refreshPending = false;
     state.loading = false;
     state.loadError = "";
-    // Refresh revision token after a successful full fetch (monitor writes bump it).
-    try {
-      const revResult = await request("GET", "/api/keys/revision", undefined, { latest: true });
-      if (revResult.isLatest()) state.revision = String(revResult.payload?.revision || "");
-    } catch {
-      state.revision = nextFingerprint;
-    }
-    if (unchanged) {
-      listUi.renderStats();
-      listUi.renderFilterCounts();
-      listUi.renderSelection();
-      return;
-    }
-    listUi.render({ preserveUi: silent });
+    listUi.render({ preserveUi: append });
   } catch (error) {
     if (error.name === "AbortError" || silent) return;
     state.loading = false;
     state.loadError = error.message;
     listUi.render();
+  } finally {
+    state.pageLoading = false;
   }
 }
 
-Object.assign(listUi, createListUi({ state, load }));
+const loadMore = () => load({ append: true });
+
+Object.assign(listUi, createListUi({ state, load, loadMore }));
 const { render, renderSelection } = listUi;
 
 const taskController = createTaskController({
@@ -95,7 +101,7 @@ const taskController = createTaskController({
       state.status = filter;
       state.query = "";
       if ($("#filter")) $("#filter").value = "";
-      render();
+      load();
       toast("已筛选：问题项（非在线）", 2800);
     }
   },
@@ -123,10 +129,15 @@ $("#sel-all").addEventListener("change", (event) => {
   state.selected = selectCurrentResults(state.selected, getVisibleKeys(state.keys, state.status, state.query), event.target.checked);
   render();
 });
-$("#filter").addEventListener("input", (event) => { state.query = event.target.value; render(); });
+let filterTimer = null;
+$("#filter").addEventListener("input", (event) => {
+  state.query = event.target.value;
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => load(), 260);
+});
 $("#status-filter").addEventListener("click", (event) => {
   const button = event.target.closest(".seg");
-  if (button) { state.status = button.dataset.status; render(); }
+  if (button && button.dataset.status !== state.status) { state.status = button.dataset.status; load(); }
 });
 $("#btn-refresh").addEventListener("click", () => { exportUi.closeMoreMenu(); load(); });
 

@@ -43,7 +43,7 @@ with db.connection(write=True) as conn:
 | `models` | JSON text array string, default `'[]'` |
 | `status` | `unknown` / `up` / `down` / `auth_error` (UI may also filter experimental labels) |
 | `latency_ms`, `last_check_at`, `last_error` | last protocol/health probe |
-| `monitor_enabled`, `interval_sec` | per-key schedule (`interval_sec` nullable) |
+| `monitor_enabled`, `interval_sec`, `next_check_at` | per-key schedule (`interval_sec` nullable); indexed persisted next due time |
 | `check_model`, `model_status`, `model_latency_ms`, `model_last_check_at`, `model_last_error` | optional model probe |
 | `sort_order` | drag-and-drop; new keys get lower-than-min order (top of list) |
 | `notes`, `created_at` | metadata |
@@ -87,7 +87,7 @@ No external tool. Evolution path:
 1. Run table-name migration before any target `CREATE TABLE IF NOT EXISTS`.
 2. Update `CREATE TABLE IF NOT EXISTS` for fresh installs.
 3. `_migrate(conn)`: `PRAGMA table_info` + conditional `ALTER TABLE ... ADD COLUMN`.
-4. Set `PRAGMA user_version` (currently **8** after migrate).
+4. Set `PRAGMA user_version` (currently **10** after migrate).
 
 When adding a column:
 
@@ -295,7 +295,216 @@ tracked file; use environment overrides or an untracked `APIKEYCONFIG_CONFIG_PAT
 - Explicit column lists on INSERT/UPDATE for fields you touch.
 - Batch insert dedupes on `(base_url, api_key)` within DB helper; returns skipped duplicate count.
 - `reorder_keys(ids)` writes `sort_order = index * 10`.
-- `get_due_keys` respects global monitor intervals, per-key `monitor_enabled` / `interval_sec`, and up vs down recheck cadence.
+- `get_due_keys(now, ..., limit)` reads only `monitor_enabled=1` rows with
+  `next_check_at <= now` through `idx_keys_monitor_next`; do not return to a
+  Python-side scan of every enabled key.
+
+## Scenario: Indexed monitor scheduling and shared probe capacity
+
+### 1. Scope / Trigger
+
+Use this contract when periodic probing must scale beyond a small key set.
+It prevents full-table due scans and prevents separate manual, batch, import,
+and monitor executors from multiplying outbound requests.
+
+### 2. Signatures
+
+- `tbl_keys.next_check_at INTEGER/BIGINT DEFAULT 0`
+- `idx_keys_monitor_next(monitor_enabled, next_check_at, last_check_at, id)`
+- `db.monitor_next_check_at(entry, status, settings, checked_at=None)`
+- `db.get_due_keys(now, ..., limit)`
+- `TASKS.probe_slot(concurrency)` around every network probe in `KeyService`
+
+### 3. Contracts
+
+- Each classify or health result persists both `last_check_at` and the next
+  due timestamp. A new/changed/reenabled key receives `next_check_at=0` so it
+  can be considered promptly.
+- `get_due_keys` selects only indexed due rows, ordered by due time, and
+  never returns plaintext data to an API response.
+- The configured `concurrency` is a process-wide network budget. Per-task
+  thread pools may wait for a slot, but active provider probes across all task
+  sources cannot exceed that budget.
+- Base cadence respects per-key interval. Down, degraded, rate-limited, and
+  auth-error states apply the documented minimum backoffs plus deterministic
+  jitter; model-only checks do not alter connectivity scheduling.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| `next_check_at <= now`, monitoring enabled | Eligible for indexed selection |
+| Monitoring disabled or timestamp in future | Not selected |
+| `rate_limited` / `auth_error` result | Schedule longer retry; do not spin immediately |
+| Concurrent task sources exceed configured limit | Workers wait at `probe_slot`, not start extra I/O |
+| Legacy DB lacks the column/index | Migration adds both before normal monitoring |
+
+### 5. Good / Base / Bad Cases
+
+- Good: thousands of enabled keys cost one limited indexed due query per tick;
+  a manual check never raises the total network concurrency above the setting.
+- Base: a fresh key has `next_check_at=0` and is picked by the capped monitor
+  batch if it was not already classified on add.
+- Bad: `SELECT * FROM tbl_keys WHERE monitor_enabled=1` followed by Python
+  filtering, or one independent `ThreadPoolExecutor` budget per task source.
+
+### 6. Tests Required
+
+- `tests/test_monitor_efficiency.py` covers persisted due selection, ordering,
+  backoff bounds, and the monitor per-tick cap.
+- `tests/test_tasks.py` proves a shared probe-slot limit across concurrent
+  callers.
+- SQLite migration tests and the opt-in MySQL contract test assert
+  `next_check_at` exists.
+
+### 7. Wrong vs Correct
+
+```python
+# Wrong: scans every monitored key and lets each task own a full concurrency
+# budget.
+rows = conn.execute("SELECT * FROM tbl_keys WHERE monitor_enabled=1").fetchall()
+with ThreadPoolExecutor(max_workers=concurrency): ...
+
+# Correct: choose only due ids through the index and enter one shared slot
+# before provider network I/O.
+due = db.get_due_keys(now, limit=concurrency * 2)
+with TASKS.probe_slot(concurrency):
+    result = core.health_check(...)
+```
+
+## Scenario: Cursor-paged public key list
+
+### 1. Scope / Trigger
+
+Use this contract when a browser list can grow beyond a small collection. The
+panel must not repeatedly transfer every masked key just to refresh counters or
+append the next visible rows.
+
+### 2. Signatures
+
+- `db.list_keys_page(limit=50, cursor="", status_filter="all", search="")`
+- `KeyService.page(limit, cursor, status_filter, search)`
+- `GET /api/keys/page?limit=50&cursor=&status=all&q=`
+
+### 3. Contracts
+
+- The DB helper returns `{items, next_cursor, total, summary, revision}`.
+- `items` are `public_key(...)` projections only; plaintext `api_key` must
+  never cross this list path.
+- `next_cursor` is opaque and encodes the stable SQL order
+  (`sort_order=0` group last, then `sort_order ASC`, `id DESC`); clients only
+  pass it back unchanged.
+- `total` uses both the requested status and search; `summary` uses the search
+  alone so status tabs retain useful counts while filtered.
+- Status filters are `all`, `up`, `down`, `auth_error`, `unknown`, `issue`,
+  and `problem`. A client that needs all records (export/sync) must use its
+  explicit full-data service path, not page through public rows.
+
+### 4. Validation & Error Matrix
+
+| Input | Result |
+| --- | --- |
+| Empty cursor and supported filter | First masked page, at most 100 rows |
+| Valid `next_cursor` from the same filter/search | Next stable page |
+| Malformed cursor or unsupported status | `ValueError`; router maps to `400 invalid_page` |
+| `limit` outside 1–100 | Constrain to the server bounds |
+
+### 5. Good / Base / Bad Cases
+
+- Good: 500 keys load as ten 50-row requests, and the final page has an empty
+  `next_cursor`.
+- Base: a search with no hits returns `items: []`, `total: 0`, but keeps its
+  `summary` for the existing collection.
+- Bad: returning `SELECT *` raw rows or using an offset cursor that drifts as
+  `sort_order` changes.
+
+### 6. Tests Required
+
+- `tests/test_core_db.py` must cover page boundary, no duplicate ids across
+  cursor pages, masked rows, status/search filtering, summaries, and invalid
+  cursors/filters.
+- `tests/test_integration.py` must call the authenticated HTTP endpoint and
+  assert the empty-page response shape at minimum.
+
+### 7. Wrong vs Correct
+
+```python
+# Wrong: every refresh transfers all rows and exposes the DB row shape.
+return db.list_keys(public=False)
+
+# Correct: the page helper owns ordering, filtering, cursor validation, and
+# the public projection.
+return db.list_keys_page(limit, cursor, status_filter, search)
+```
+
+---
+
+## Scenario: WebDAV portable-key sync boundary
+
+### 1. Scope / Trigger
+
+Use this contract when changing WebDAV backup, export, import, or a storage
+backend. It prevents a data-backup action from silently replacing local
+operator configuration or authentication data.
+
+### 2. Signatures
+
+- `SyncService.upload()` reads `db.list_keys(public=False)` and calls
+  `core.dumps_sync_payload(entries, exported_at)`.
+- `core.build_sync_payload(entries, exported_at)` returns
+  `{app, schema, exported_at, keys}`.
+- `SyncService.download(mode)` calls `core.parse_sync_payload(...)`; its
+  `replace` branch deletes existing key ids and calls `db.add_keys_batch(...)`.
+
+### 3. Contracts
+
+- Every remote key item contains only `name`, `base_url`, `api_key`,
+  `check_model`, and `check_path`; IDs, probe state, notes, settings, users,
+  sessions, and WebDAV credentials never cross the boundary.
+- `merge` deduplicates by `(base_url, api_key)`. `replace` snapshots local
+  keys first, then replaces **only** `tbl_keys` rows; it preserves local
+  settings and administrator/session tables on SQLite and MySQL alike.
+- The same `db` facade owns both engines, so sync code must not branch on a
+  backend type or issue raw engine-specific SQL.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Remote payload has unsupported top-level metadata | Ignore it; parse only portable key items |
+| Portable item has invalid URL or lacks key | Drop that item |
+| `mode=merge` | Add new portable keys and preserve existing keys |
+| `mode=replace` | Snapshot then replace only keys; preserve settings/users/sessions |
+| Any backend selection | Use the same facade and payload contract |
+
+### 5. Good / Base / Bad Cases
+
+- Good: downloading a remote key set updates only the local key collection;
+  a custom setting and administrator user remain available afterward.
+- Base: an empty valid remote collection in replace mode clears local keys but
+  still leaves settings and users intact.
+- Bad: serializing `db.get_all_settings()`, copying `data.db`, or deleting
+  settings/users as part of a key replacement.
+
+### 6. Tests Required
+
+- `tests/test_sync_service.py` asserts the exact envelope/key field sets and
+  proves replace preserves a custom setting and administrator user.
+- `tests/test_webdav.py` covers payload round-trip and invalid item removal.
+- The opt-in MySQL/Redis contract test verifies the selected MySQL schema is
+  compatible; live tests require explicit configured infrastructure.
+
+### 7. Wrong vs Correct
+
+```python
+# Wrong: treats a cloud backup as a whole local database replacement.
+replace_database(remote_blob)
+
+# Correct: portable payload in, key rows only changed.
+items = core.parse_sync_payload(remote_blob)
+db.delete_keys(existing_key_ids)
+db.add_keys_batch(items)
+```
 
 ---
 

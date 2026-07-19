@@ -12,9 +12,26 @@
 - MySQL 8.0+ primary storage initialization (`keys`, `settings`, `users`, and
   `sessions`) plus an optional Redis 8.0+ read-through cache for masked
   API-key records and public settings.
+- Cursor-paged key-list API (`GET /api/keys/page`) with server-side status and
+  search filtering, masked rows, aggregate counters, and an opaque next-page
+  cursor.
+- Indexed monitor scheduling via persisted `next_check_at`, plus one shared
+  outbound-probe concurrency budget across scheduled, manual, import, and
+  batch checks.
+- WebDAV sync-boundary regression coverage: remote payloads and replacement
+  operations contain only portable API-key fields, leaving local settings and
+  administrator accounts intact.
 
 ### Changed
 
+- The key panel now loads 50 rows at a time and continues on scroll or an
+  explicit “load more” action. Background revision checks no longer replace a
+  scrolled list; they show a refresh prompt, while Refresh deliberately reloads
+  the first page for the current filters.
+- Monitoring now persists its next due time and applies deterministic jitter
+  with status-aware backoff: degraded endpoints, rate limits, and rejected
+  credentials are checked less aggressively without reducing protocol-status
+  coverage for normal checks.
 - 协议能力仅在对应协议本次探测成功（`up`）时展示；401/403、限流、异常或超时不再误判为支持。手动检测与后台监测都会全量刷新能力，失败后清除历史标志；无确认能力时面板显示“未确认”。
 - Anthropic 能力探针改为可靠的真实生成探测：默认请求超时由 15s 提至 **45s**（慢/推理型网关一次 `/messages` 生成可达 5–37s 且偶发 502），并对瞬时失败（5xx / 超时 / 连接错误）最多重试 2 次（任一次 200 即成功），避免可用端点被误判为「不支持」、`supports_anthropic` 在 true/false 间横跳。设置页「请求超时」补充说明；现有库旧默认值 15 一次性迁移到 45。
 

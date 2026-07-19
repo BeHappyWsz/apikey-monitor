@@ -87,7 +87,7 @@ export function initExportUi({ api, state, openModal }) {
 
   async function backupAll() {
     closeMoreMenu();
-    if (!state.keys.length) return toast("还没有可备份的 Key");
+    if (!Number(state.summary?.all || state.total || 0)) return toast("还没有可备份的 Key");
     const result = await api("GET", "/api/keys/export_all");
     state.exportId = null;
     state.exportMode = "backup";

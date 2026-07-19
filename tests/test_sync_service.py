@@ -241,6 +241,21 @@ class SyncServiceTests(_DBPatchedCase):
         # last-sync is recorded.
         self.assertIn("upload", self.svc().status()["last_sync"])
 
+    def test_sync_payload_and_replace_only_touch_api_keys(self):
+        db.add_key({"name": "local", "base_url": "https://local.com", "api_key": "sk-local"})
+        db.set_settings({"custom_setting": "must-survive"})
+        user_id = db.create_user("operator", "hash", enabled=True)
+        self.svc().upload()
+        envelope = json.loads(self.state.data["/dav" + self.remote])
+        self.assertEqual(set(envelope), {"app", "schema", "exported_at", "keys"})
+        self.assertEqual(set(envelope["keys"][0]), {"name", "base_url", "api_key", "check_model", "check_path"})
+        self.state.data["/dav" + self.remote] = core.dumps_sync_payload([
+            {"name": "remote", "base_url": "https://remote.com", "api_key": "sk-remote"},
+        ], 1).encode("utf-8")
+        self.svc().download("replace")
+        self.assertEqual(db.get_all_settings()["custom_setting"], "must-survive")
+        self.assertEqual(db.get_user(user_id)["username"], "operator")
+
     def test_download_merge_adds_without_removing(self):
         db.add_keys_batch([{"name": "local", "base_url": "https://local.com", "api_key": "sk-l"}])
         self.state.data["/dav" + self.remote] = core.dumps_sync_payload([

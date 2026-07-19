@@ -33,6 +33,9 @@ HTTP must not reimplement lease/check logic; call these services from `api/route
 - Always `release` in `finally`.
 - Batch workers use `_check_unleased` but each `run_one` still acquire/release inside `TaskService`.
 - If acquire fails in batch, item counts as **skipped** (not failed).
+- `TASKS.probe_slot(concurrency)` is a second, global guard around network I/O.
+  Every KeyService path (single, model, import, batch, monitor) must enter it;
+  separate task executors must not multiply the configured outbound concurrency.
 
 ### Add / update semantics
 
@@ -65,10 +68,20 @@ Concurrency for batch comes from settings `concurrency` (1?32).
 
 1. Thread name `monitor`, tick interval `_TICK = 10` seconds.
 2. If `global_monitor_enabled != "1"`, return.
-3. `db.get_due_keys(now, global_interval_sec, down_recheck_interval_sec)`.
+3. `db.get_due_keys(now, ..., limit=concurrency * 2)` uses the indexed
+   persisted `next_check_at` schedule; it must not read every enabled key.
 4. `KEYS.batch_check(ids, health=True)`.
 
 Tick exceptions are printed and must not kill the thread.
+
+Each protocol result persists a new `next_check_at`:
+
+- normal/unknown: per-key interval or `global_interval_sec`;
+- down with no per-key interval: `down_recheck_interval_sec`;
+- degraded: at least 10 minutes; rate-limited: at least 15 minutes;
+  auth error: at least 6 hours;
+- deterministic ±5% jitter prevents a bulk import or restart from synchronizing
+  large numbers of requests.
 
 ---
 

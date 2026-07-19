@@ -3,6 +3,7 @@ import copy
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -12,6 +13,9 @@ class TaskService:
         self._tasks = {}
         self._leases = set()
         self._lock = threading.RLock()
+        self._probe_slots = threading.Condition(self._lock)
+        self._active_probes = 0
+        self._probe_limit = 8
 
     def _cleanup(self):
         cutoff = time.time() - self.ttl
@@ -36,6 +40,31 @@ class TaskService:
     def release(self, key_id):
         with self._lock:
             self._leases.discard(key_id)
+
+    @contextmanager
+    def probe_slot(self, limit):
+        """Share one bounded network-probe budget across every task source.
+
+        Manual checks, imports, batches, and the scheduled monitor can all run
+        at once. Per-task executors remain useful for task accounting, while
+        this condition keeps their combined outbound requests below the latest
+        configured concurrency value.
+        """
+        try:
+            requested = max(1, int(limit))
+        except (TypeError, ValueError):
+            requested = 1
+        with self._probe_slots:
+            self._probe_limit = requested
+            while self._active_probes >= self._probe_limit:
+                self._probe_slots.wait()
+            self._active_probes += 1
+        try:
+            yield
+        finally:
+            with self._probe_slots:
+                self._active_probes -= 1
+                self._probe_slots.notify_all()
 
     def create(self, ids, worker, concurrency=8, kind="check"):
         task_id = f"{kind}-{uuid.uuid4().hex[:12]}"
