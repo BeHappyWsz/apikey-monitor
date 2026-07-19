@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-19
+
+相对 [0.1.2] 的功能与兼容性升级版本。
+
 ### Added
 
 - Local administrator authentication with Argon2id password hashes, opaque
@@ -125,7 +129,8 @@
 - JSON 导出字段精简为可移植配置：`name`、`base_url`、`api_key`、`check_model`
 - 导出弹窗布局优化
 
-[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.2.0
 [0.1.2]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.2
 [0.1.1]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.1
 [0.1.0]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.0
