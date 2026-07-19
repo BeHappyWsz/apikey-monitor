@@ -3,6 +3,7 @@ import json
 import mimetypes
 import os
 import uuid
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlsplit
 
@@ -24,13 +25,15 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
-    def _json(self, value, status=200):
+    def _json(self, value, status=200, extra_headers=None):
         raw = json.dumps(value, ensure_ascii=False).encode("utf-8")
         try:
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(raw)))
             self.send_header("Cache-Control", "no-store")
+            for name, header_value in (extra_headers or {}).items():
+                self.send_header(name, header_value)
             self._security_headers()
             self.end_headers()
             self.wfile.write(raw)
@@ -55,8 +58,21 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         try:
             body = self._body(parsed.path) if method in ("POST", "PUT") else None
-            status, payload = route(method, parsed.path, parsed.query, body, self.server)
-            self._json(payload, status)
+            cookie = SimpleCookie()
+            cookie.load(self.headers.get("Cookie", ""))
+            request = {
+                "cookies": {key: morsel.value for key, morsel in cookie.items()},
+                "source_ip": self.client_address[0],
+                "forwarded_proto": self.headers.get("X-Forwarded-Proto", ""),
+                "csrf_token": self.headers.get("X-CSRF-Token", ""),
+            }
+            result = route(method, parsed.path, parsed.query, body, self.server, request)
+            if len(result) == 3:
+                status, payload, headers = result
+            else:
+                status, payload = result
+                headers = None
+            self._json(payload, status, headers)
         except ApiError as exc:
             self._error(exc.status, exc.code, exc.message, request_id)
         except _CLIENT_DISCONNECT:

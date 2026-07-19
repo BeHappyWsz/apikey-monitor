@@ -1,5 +1,22 @@
 # HTTP API 文档
 
+## Authentication
+
+Except `GET /api/system/health`, `GET /api/auth/bootstrap`, and
+`POST /api/auth/login`, API routes require the `apikeyconfig_session` HttpOnly
+cookie. Unsafe requests also require `X-CSRF-Token` from `GET /api/auth/me`.
+
+| Route | Purpose |
+| --- | --- |
+| `POST /api/auth/login` | Body: `username`, `password`; sets the session cookie and returns user + CSRF token. |
+| `POST /api/auth/logout` | Revokes the current session; requires CSRF. |
+| `GET /api/auth/me` | Returns the authenticated user and CSRF token. |
+| `GET /api/auth/users` | Lists administrator accounts. |
+| `POST /api/auth/users` | Creates an administrator; requires `username` and a 12+ character password. |
+
+Authentication failures use `401 unauthenticated`, CSRF failures use
+`403 csrf_failed`, and login throttling uses `429 login_rate_limited`.
+
 服务默认地址：
 
 ```text

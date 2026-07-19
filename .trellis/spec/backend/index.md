@@ -39,6 +39,7 @@ Also: `CONTRIBUTING.md`, `docs/api.md` for public HTTP changes.
 | [Error Handling](./error-handling.md) | ApiError, validation, status codes | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | Zero-deps, secrets, tests | Filled |
 | [Logging Guidelines](./logging-guidelines.md) | Minimal logging | Filled |
+| [Authentication Contract](./authentication.md) | Login, sessions, CSRF, bootstrap, proxy trust | Filled |
 
 ---
 

@@ -2,9 +2,12 @@
 """SQLite and JSON configuration persistence."""
 import json
 import os
+import re
 import sqlite3
 import time
 from contextlib import contextmanager
+import pymysql
+import redis
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("APIKEYCONFIG_DB_PATH", os.path.join(BASE_DIR, "data.db"))
@@ -19,12 +22,169 @@ _FALLBACK_DEFAULTS = {
 
 
 _list_generation = 0
+_cache_client = None
+_cache_signature = None
+_cache_retry_at = 0
+_CACHE_TTL_SECONDS = 60
+_PUBLIC_KEY_CACHE_PREFIX = "apikey-monitor:public-key:"
+_PUBLIC_SETTINGS_CACHE_KEY = "apikey-monitor:public-settings"
+
+
+def _private_config():
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as stream:
+            data = json.load(stream)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _connection_value(cfg, name, default):
+    """Read a private connection option, with container-friendly env override."""
+    return os.environ.get(f"APIKEYCONFIG_{name}", cfg.get(f"_{name.lower()}", default))
+
+
+def storage_backend():
+    backend = str(os.environ.get("APIKEYCONFIG_STORAGE_BACKEND") or
+                  _private_config().get("_storage_backend") or "sqlite").lower()
+    if backend not in ("sqlite", "mysql"):
+        raise ValueError("APIKEYCONFIG_STORAGE_BACKEND must be sqlite or mysql")
+    return backend
+
+
+def storage_description():
+    """A non-secret, operator-facing description of the active primary store."""
+    if storage_backend() == "sqlite":
+        return f"sqlite:{DB_PATH}"
+    cfg = _private_config()
+    host = _connection_value(cfg, "MYSQL_HOST", "127.0.0.1")
+    port = _connection_value(cfg, "MYSQL_PORT", 3306)
+    database = _connection_value(cfg, "MYSQL_DATABASE", "apikey-monitor")
+    return f"mysql:{host}:{port}/{database}"
+
+
+def _cache():
+    """Return the optional Redis client, without making Redis a dependency.
+
+    Redis is currently enabled for the MySQL primary store only.  This keeps
+    isolated SQLite tests and standalone SQLite deployments from accidentally
+    sharing data through the configured Redis instance.  A failed connection
+    is retried after a short delay so a Redis restart recovers automatically.
+    """
+    global _cache_client, _cache_signature, _cache_retry_at
+    if storage_backend() != "mysql":
+        return None
+    cfg = _private_config()
+    signature = (
+        _connection_value(cfg, "REDIS_HOST", "127.0.0.1"),
+        str(_connection_value(cfg, "REDIS_PORT", 6379)),
+        str(_connection_value(cfg, "REDIS_DB", 0)),
+        _connection_value(cfg, "REDIS_USERNAME", "") or "",
+        _connection_value(cfg, "REDIS_PASSWORD", "") or "",
+    )
+    now = time.monotonic()
+    if _cache_signature == signature and _cache_client is not None:
+        return _cache_client
+    if _cache_signature == signature and now < _cache_retry_at:
+        return None
+    try:
+        client = redis.Redis(host=signature[0], port=int(signature[1]), db=int(signature[2]),
+            username=signature[3] or None, password=signature[4] or None,
+            decode_responses=True, socket_connect_timeout=1, socket_timeout=1)
+        client.ping()
+    except Exception:
+        _cache_client = None
+        _cache_signature = signature
+        _cache_retry_at = now + 5
+        return None
+    _cache_client = client
+    _cache_signature = signature
+    _cache_retry_at = 0
+    return _cache_client
+
+
+def _cache_get(name):
+    try:
+        client = _cache()
+        value = client.get(name) if client else None
+        return json.loads(value) if value else None
+    except Exception:
+        return None
+
+
+def _cache_set(name, value):
+    try:
+        client = _cache()
+        if client:
+            client.setex(name, _CACHE_TTL_SECONDS, json.dumps(value, ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def _invalidate_public_cache():
+    try:
+        client = _cache()
+        if client:
+            names = list(client.scan_iter(f"{_PUBLIC_KEY_CACHE_PREFIX}*"))
+            names.append(_PUBLIC_SETTINGS_CACHE_KEY)
+            if names: client.delete(*names)
+    except Exception:
+        pass
+
+
+class _MyRow(dict):
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+
+class _MyCursor:
+    def __init__(self, cursor): self._cursor = cursor
+    @staticmethod
+    def _sql(sql): return re.sub(r"\bkeys\b", "`keys`", sql.replace("?", "%s"))
+    def execute(self, sql, args=None): self._cursor.execute(self._sql(sql), args); return self
+    def executemany(self, sql, args): self._cursor.executemany(self._sql(sql), args); return self
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        return _MyRow(row) if row else None
+    def fetchall(self): return [_MyRow(row) for row in self._cursor.fetchall()]
+    def __iter__(self): return iter(self.fetchall())
+    @property
+    def rowcount(self): return self._cursor.rowcount
+    @property
+    def lastrowid(self): return self._cursor.lastrowid
+
+
+class _MyConnection:
+    def __init__(self, conn): self._conn = conn
+    def execute(self, sql, args=None):
+        cursor = _MyCursor(self._conn.cursor())
+        return cursor.execute(sql, args)
+    def executemany(self, sql, args):
+        cursor = _MyCursor(self._conn.cursor())
+        return cursor.executemany(sql, args)
+    def commit(self): self._conn.commit()
+    def rollback(self): self._conn.rollback()
+    def close(self): self._conn.close()
+
+
+def _mysql_conn():
+    cfg = _private_config()
+    return _MyConnection(pymysql.connect(
+        host=_connection_value(cfg, "MYSQL_HOST", "127.0.0.1"),
+        port=int(_connection_value(cfg, "MYSQL_PORT", 3306)),
+        user=_connection_value(cfg, "MYSQL_USERNAME", "root"),
+        password=_connection_value(cfg, "MYSQL_PASSWORD", ""),
+        database=_connection_value(cfg, "MYSQL_DATABASE", "apikey-monitor"),
+        charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor, autocommit=False, connect_timeout=5))
 
 
 def touch_list_generation():
     """Bump in-process generation so clients notice list mutations quickly."""
     global _list_generation
     _list_generation += 1
+    _invalidate_public_cache()
     return _list_generation
 
 
@@ -72,7 +232,33 @@ def _load_defaults():
     return out
 
 
+def get_bootstrap_admin_username():
+    """Read the first-admin name from the shipped startup configuration only."""
+    if not os.path.isfile(CONFIG_PATH):
+        return "admin"
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as stream:
+            value = json.load(stream).get("_bootstrap_admin_username", "admin")
+    except Exception:
+        return "admin"
+    value = str(value or "").strip()
+    return value or "admin"
+
+
+def get_bootstrap_admin_password():
+    if not os.path.isfile(CONFIG_PATH):
+        return "ChangeMe!2026"
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as stream:
+            value = json.load(stream).get("_bootstrap_admin_password", "ChangeMe!2026")
+    except Exception:
+        return "ChangeMe!2026"
+    return str(value or "")
+
+
 def get_conn():
+    if storage_backend() == "mysql":
+        return _mysql_conn()
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
@@ -102,7 +288,7 @@ def _migrate(conn):
                       ("model_last_error", "TEXT DEFAULT ''"), ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''")):
         if col not in cols:
             conn.execute(f"ALTER TABLE keys ADD COLUMN {col} {decl}")
-    conn.execute("PRAGMA user_version=3")
+    conn.execute("PRAGMA user_version=4")
     # webdav_last_sync was renamed to "_webdav_last_sync" (runtime state) so it
     # stays out of the /api/settings surface. Drop legacy unprefixed rows.
     conn.execute("DELETE FROM settings WHERE k = 'webdav_last_sync'")
@@ -113,9 +299,15 @@ def _migrate(conn):
     _to_row = conn.execute("SELECT v FROM settings WHERE k='request_timeout_sec'").fetchone()
     if _to_row and str(_to_row["v"]) == "15":
         conn.execute("UPDATE settings SET v='45' WHERE k='request_timeout_sec'")
+    user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "must_change_password" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0")
 
 
 def init_db():
+    if storage_backend() == "mysql":
+        _init_mysql()
+        return
     with connection(write=True) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript("""
@@ -130,6 +322,22 @@ def init_db():
             sort_order INTEGER DEFAULT 0, check_path TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT);
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            must_change_password INTEGER DEFAULT 0,
+            created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+            token_hash TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            csrf_token TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            last_seen_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
         """)
         _migrate(conn)
         # Seed the settings table only on first run (empty table). config.json
@@ -140,9 +348,41 @@ def init_db():
                 conn.execute("INSERT INTO settings(k,v) VALUES(?,?)", (key, value))
 
 
+def _init_mysql():
+    with connection(write=True) as conn:
+        statements = [
+            """CREATE TABLE IF NOT EXISTS keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,sort_order BIGINT DEFAULT 0,check_path TEXT,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at)) CHARACTER SET utf8mb4""",
+            "CREATE TABLE IF NOT EXISTS settings (k VARCHAR(191) PRIMARY KEY,v LONGTEXT) CHARACTER SET utf8mb4",
+            "CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY AUTO_INCREMENT,username VARCHAR(64) NOT NULL UNIQUE,password_hash TEXT NOT NULL,must_change_password TINYINT DEFAULT 0,created_at BIGINT NOT NULL) CHARACTER SET utf8mb4",
+            "CREATE TABLE IF NOT EXISTS sessions (token_hash CHAR(64) PRIMARY KEY,user_id BIGINT NOT NULL,csrf_token TEXT NOT NULL,created_at BIGINT NOT NULL,expires_at BIGINT NOT NULL,last_seen_at BIGINT NOT NULL,INDEX idx_sessions_expires_at(expires_at),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) CHARACTER SET utf8mb4",
+        ]
+        for statement in statements: conn.execute(statement)
+        # Existing early development databases may pre-date the password-change
+        # flag.  Fresh schemas above already include it; this is additive only.
+        user_columns = {row["COLUMN_NAME"] for row in conn.execute(
+            "SELECT COLUMN_NAME FROM information_schema.columns "
+            "WHERE table_schema=DATABASE() AND table_name='users'")}
+        if "must_change_password" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN must_change_password TINYINT DEFAULT 0")
+        if conn.execute("SELECT 1 FROM settings LIMIT 1").fetchone() is None:
+            for key, value in _load_defaults().items():
+                conn.execute("INSERT INTO settings(k,v) VALUES(?,?)", (key, value))
+
+
 def get_all_settings():
     with connection() as conn:
         return {row["k"]: row["v"] for row in conn.execute("SELECT k,v FROM settings")}
+
+
+def get_public_settings():
+    """Return only browser-safe settings and cache that filtered payload."""
+    cached = _cache_get(_PUBLIC_SETTINGS_CACHE_KEY)
+    if cached is not None:
+        return cached
+    values = {key: value for key, value in get_all_settings().items()
+              if not key.startswith("_")}
+    _cache_set(_PUBLIC_SETTINGS_CACHE_KEY, values)
+    return values
 
 
 def set_settings(items):
@@ -151,7 +391,11 @@ def set_settings(items):
     normalized = {key: str(value) for key, value in items.items()}
     with connection(write=True) as conn:
         for key, value in normalized.items():
-            conn.execute("INSERT INTO settings(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (key, value))
+            if storage_backend() == "mysql":
+                conn.execute("INSERT INTO settings(k,v) VALUES(?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)", (key, value))
+            else:
+                conn.execute("INSERT INTO settings(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (key, value))
+    _invalidate_public_cache()
 
 
 def replace_settings(items):
@@ -159,6 +403,76 @@ def replace_settings(items):
     with connection(write=True) as conn:
         conn.execute("DELETE FROM settings")
         conn.executemany("INSERT INTO settings(k,v) VALUES(?,?)", [(key, str(value)) for key, value in items.items()])
+    _invalidate_public_cache()
+
+
+def count_users():
+    with connection() as conn:
+        return int(conn.execute("SELECT COUNT(*) FROM users").fetchone()[0])
+
+
+def get_user_by_username(username):
+    with connection() as conn:
+        row = conn.execute("SELECT id,username,password_hash,must_change_password,created_at FROM users WHERE username=?", (username,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_user(user_id):
+    with connection() as conn:
+        row = conn.execute("SELECT id,username,must_change_password,created_at FROM users WHERE id=?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def list_users():
+    with connection() as conn:
+        return [dict(row) for row in conn.execute("SELECT id,username,created_at FROM users ORDER BY id ASC")]
+
+
+def create_user(username, password_hash, must_change_password=False):
+    with connection(write=True) as conn:
+        cur = conn.execute("INSERT INTO users(username,password_hash,must_change_password,created_at) VALUES(?,?,?,?)",
+                           (username, password_hash, int(bool(must_change_password)), int(time.time())))
+        return int(cur.lastrowid)
+
+
+def update_user_password_hash(user_id, password_hash, must_change_password=None):
+    with connection(write=True) as conn:
+        if must_change_password is None:
+            conn.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash, user_id))
+        else:
+            conn.execute("UPDATE users SET password_hash=?,must_change_password=? WHERE id=?",
+                         (password_hash, int(bool(must_change_password)), user_id))
+
+
+def create_session(token_hash, user_id, csrf_token, expires_at):
+    now = int(time.time())
+    with connection(write=True) as conn:
+        conn.execute("INSERT INTO sessions(token_hash,user_id,csrf_token,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?,?)",
+                     (token_hash, user_id, csrf_token, now, int(expires_at), now))
+
+
+def get_session(token_hash):
+    with connection() as conn:
+        row = conn.execute("""SELECT s.token_hash,s.csrf_token,s.expires_at,s.last_seen_at,
+                                   u.id AS user_id,u.username,u.must_change_password
+                            FROM sessions s JOIN users u ON u.id=s.user_id
+                            WHERE s.token_hash=?""", (token_hash,)).fetchone()
+    return dict(row) if row else None
+
+
+def touch_session(token_hash):
+    with connection(write=True) as conn:
+        conn.execute("UPDATE sessions SET last_seen_at=? WHERE token_hash=?", (int(time.time()), token_hash))
+
+
+def delete_session(token_hash):
+    with connection(write=True) as conn:
+        conn.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash,))
+
+
+def delete_expired_sessions(now=None):
+    with connection(write=True) as conn:
+        return conn.execute("DELETE FROM sessions WHERE expires_at<=?", (int(now or time.time()),)).rowcount
 
 
 def _row_to_dict(row):
@@ -192,20 +506,32 @@ def public_key(entry, include_secret=False):
 
 
 def list_keys(public=False):
+    cache_name = f"{_PUBLIC_KEY_CACHE_PREFIX}list"
+    if public:
+        cached = _cache_get(cache_name)
+        if cached is not None: return cached
     with connection() as conn:
         rows = [_row_to_dict(row) for row in conn.execute(
             "SELECT * FROM keys ORDER BY CASE WHEN sort_order=0 THEN 1 ELSE 0 END, sort_order ASC, id DESC")]
     if public:
-        return [public_key(row) for row in rows]
+        result = [public_key(row) for row in rows]
+        _cache_set(cache_name, result)
+        return result
     return rows
 
 
 def get_key(key_id, public=False):
+    cache_name = f"{_PUBLIC_KEY_CACHE_PREFIX}{int(key_id)}"
+    if public:
+        cached = _cache_get(cache_name)
+        if cached is not None: return cached
     with connection() as conn:
         row = conn.execute("SELECT * FROM keys WHERE id=?", (key_id,)).fetchone()
         entry = _row_to_dict(row) if row else None
     if public:
-        return public_key(entry)
+        result = public_key(entry)
+        if result: _cache_set(cache_name, result)
+        return result
     return entry
 
 

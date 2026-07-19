@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Local administrator authentication with Argon2id password hashes, opaque
+  HttpOnly sessions, CSRF protection, login throttling, bootstrap credentials
+  from the private startup configuration, and administrator-created accounts.
+- MySQL 8.0+ primary storage initialization (`keys`, `settings`, `users`, and
+  `sessions`) plus an optional Redis 8.0+ read-through cache for masked
+  API-key records and public settings.
+
 ### Changed
 
 - 协议能力仅在对应协议本次探测成功（`up`）时展示；401/403、限流、异常或超时不再误判为支持。手动检测与后台监测都会全量刷新能力，失败后清除历史标志；无确认能力时面板显示“未确认”。

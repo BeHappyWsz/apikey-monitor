@@ -11,6 +11,7 @@ from services.task_service import TASKS
 from services.settings_service import SETTINGS
 from services.sync_service import SYNC
 from services import restart_service
+from services.auth_service import AUTH, AuthError
 from core.webdav import WebDAVError
 
 _KEY_RE = re.compile(r"^/api/keys/(\d+)$")
@@ -44,7 +45,31 @@ def _sync_call(fn, *args):
         raise ApiError(400, "invalid_sync", str(exc))
 
 
-def route(method, path, query, body, server):
+def _secure_cookie(request, server):
+    return bool(server and getattr(server, "trust_proxy_headers", False)
+                and str((request or {}).get("forwarded_proto", "")).lower() == "https")
+
+
+def _authenticated_session(method, path, server, request):
+    """Return the session for protected HTTP routes; direct unit calls bypass it."""
+    if server is None or not path.startswith("/api/"):
+        return None
+    public = path == "/api/system/health" or path == "/api/auth/bootstrap" or (method == "POST" and path == "/api/auth/login")
+    if public:
+        return None
+    session = AUTH.current((request or {}).get("cookies", {}).get("apikeyconfig_session", ""))
+    if not session:
+        raise ApiError(401, "unauthenticated", "请先登录")
+    if method in ("POST", "PUT", "DELETE") and not AUTH.csrf_valid(session, (request or {}).get("csrf_token", "")):
+        raise ApiError(403, "csrf_failed", "请求验证失败，请刷新页面后重试")
+    if session["user"].get("must_change_password") and path not in ("/api/auth/me", "/api/auth/password", "/api/auth/logout"):
+        raise ApiError(403, "password_change_required", "请先修改初始密码")
+    return session
+
+
+def route(method, path, query, body, server, request=None):
+    request = request or {}
+    session = _authenticated_session(method, path, server, request)
     if method == "GET" and path == "/api/system/health":
         from version import APP_NAME, __version__
         return 200, {
@@ -55,6 +80,40 @@ def route(method, path, query, body, server):
             "name": APP_NAME,
             "version": __version__,
         }
+    if method == "GET" and path == "/api/auth/bootstrap":
+        return 200, {"bootstrap_required": AUTH.bootstrap_required()}
+    if method == "POST" and path == "/api/auth/login":
+        if not isinstance(body, dict):
+            raise ApiError(400, "invalid_login", "登录请求无效")
+        try:
+            result = AUTH.login(body.get("username"), body.get("password"), request.get("source_ip"))
+        except AuthError as exc:
+            raise ApiError(exc.status, exc.code, str(exc))
+        return 200, {"user": result["user"], "csrf_token": result["csrf_token"]}, {
+            "Set-Cookie": AUTH.session_cookie(result["token"], _secure_cookie(request, server))
+        }
+    if method == "POST" and path == "/api/auth/logout":
+        AUTH.logout(request.get("cookies", {}).get("apikeyconfig_session", ""))
+        return 200, {"ok": True}, {"Set-Cookie": AUTH.session_cookie("", _secure_cookie(request, server), clear=True)}
+    if method == "GET" and path == "/api/auth/me":
+        return 200, {"user": session["user"], "csrf_token": session["csrf_token"]}
+    if method == "POST" and path == "/api/auth/password":
+        if not isinstance(body, dict):
+            raise ApiError(400, "invalid_password", "密码请求无效")
+        try:
+            AUTH.change_password(session["user"]["id"], body.get("old_password"), body.get("new_password"))
+        except AuthError as exc:
+            raise ApiError(exc.status, exc.code, str(exc))
+        return 200, {"ok": True}
+    if method == "GET" and path == "/api/auth/users":
+        return 200, {"users": db.list_users()}
+    if method == "POST" and path == "/api/auth/users":
+        if not isinstance(body, dict):
+            raise ApiError(400, "invalid_user", "用户请求无效")
+        try:
+            return 201, {"user": AUTH.create_user(body.get("username"), body.get("password"))}
+        except AuthError as exc:
+            raise ApiError(exc.status, exc.code, str(exc))
     if method == "GET" and path == "/api/keys":
         return 200, KEYS.list()
     if method == "GET" and path == "/api/keys/revision":

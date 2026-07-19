@@ -943,6 +943,16 @@ table.cand { min-width:650px; }
   color: #cf1322;
 }
 
+/* Authentication gate */
+.auth-required .topbar, .auth-required .shell { display: none; }
+.auth-gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.auth-gate[hidden] { display: none; }
+.auth-card { width: min(100%, 390px); display: grid; gap: 14px; padding: 30px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 18px 48px rgba(31,45,61,.16); }
+.auth-card h1, .auth-card p { margin: 0; }
+.auth-card p { color: var(--muted); }
+.auth-card label { display: grid; gap: 6px; color: var(--text); font-weight: 600; }
+.auth-card input { width: 100%; }
+
 #task-foot {
   margin-top: 14px;
   justify-content: space-between;

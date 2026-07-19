@@ -5,12 +5,14 @@ import sys
 import threading
 import time
 import webbrowser
+import os
 from http.server import ThreadingHTTPServer
 
 import db
 import monitor
 from api.handler import Handler
 from services import instance as instance_svc
+from services.auth_service import AUTH
 
 
 class AppServer(ThreadingHTTPServer):
@@ -28,9 +30,14 @@ def main(argv=None):
     parser.add_argument("--restart-id", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     db.init_db()
+    AUTH.ensure_bootstrap()
     settings = db.get_all_settings()
     host = args.host or settings.get("server_host", "127.0.0.1")
     port = args.port or int(settings.get("server_port", 7878))
+    trust_proxy_headers = os.environ.get("APIKEYCONFIG_TRUST_PROXY", "") == "1"
+    if host == "0.0.0.0" and not trust_proxy_headers:
+        print("[apiKeyConfig] 网络监听需要由 HTTPS 反向代理保护，并设置 APIKEYCONFIG_TRUST_PROXY=1", file=sys.stderr)
+        raise SystemExit(1)
 
     try:
         # Restart helper already stopped the old process; still clear stale pid.
@@ -47,12 +54,13 @@ def main(argv=None):
         print(f"[apiKeyConfig] 无法绑定 {host}:{port}: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
     server.runtime_settings = runtime
+    server.trust_proxy_headers = trust_proxy_headers
     instance_svc.write_pid_record(host, port)
     monitor.start()
     display_host = "127.0.0.1" if host in ("0.0.0.0", "localhost") else host
     url = f"http://{display_host}:{port}"
     print(f"[apiKeyConfig] 服务已启动: {url}")
-    print(f"[apiKeyConfig] 数据库: {db.DB_PATH}")
+    print(f"[apiKeyConfig] 数据库: {db.storage_description()}")
     if not args.no_browser:
         threading.Thread(target=lambda: (time.sleep(.8), webbrowser.open(url)), daemon=True).start()
     try:

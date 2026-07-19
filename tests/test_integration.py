@@ -34,10 +34,11 @@ def wait_health(port, up=True, timeout=20):
     return False
 
 
-def json_request(method, url, payload=None):
+def json_request(method, url, payload=None, headers=None):
     raw = json.dumps(payload or {}).encode()
+    request_headers = {"Content-Type": "application/json", **(headers or {})}
     request = urllib.request.Request(url, data=raw if method != "GET" else None,
-                                     headers={"Content-Type": "application/json"}, method=method)
+                                     headers=request_headers, method=method)
     with urllib.request.urlopen(request, timeout=3) as response:
         return response.status, json.loads(response.read())
 
@@ -69,10 +70,29 @@ class IntegrationTests(unittest.TestCase):
         self.assertTrue(wait_health(port), "temporary server did not become healthy")
         return process
 
+    def login_headers(self, port):
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/api/auth/login",
+            data=json.dumps({"username": "admin", "password": "ChangeMe!2026"}).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(request, timeout=3) as response:
+            body = json.loads(response.read())
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        headers = {"Cookie": cookie, "X-CSRF-Token": body["csrf_token"]}
+        json_request("POST", f"http://127.0.0.1:{port}/api/auth/password", {
+            "old_password": "ChangeMe!2026", "new_password": "correct-horse-battery-staple"}, headers)
+        return headers
+
     def test_api_smoke_and_request_limit(self):
         port = free_port(); self.start(port)
-        status, data = json_request("GET", f"http://127.0.0.1:{port}/api/keys")
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/api/keys", timeout=2)
+        self.assertEqual(ctx.exception.code, 401)
+        headers = self.login_headers(port)
+        status, data = json_request("GET", f"http://127.0.0.1:{port}/api/keys", headers=headers)
         self.assertEqual((status, data), (200, []))
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            json_request("POST", f"http://127.0.0.1:{port}/api/settings", {}, {"Cookie": headers["Cookie"]})
+        self.assertEqual(ctx.exception.code, 403)
         request = urllib.request.Request(f"http://127.0.0.1:{port}/api/settings", data=b"x"*(256*1024+1),
                                          headers={"Content-Type":"application/json"}, method="POST")
         with self.assertRaises(urllib.error.HTTPError) as ctx: urllib.request.urlopen(request, timeout=2)
@@ -80,10 +100,11 @@ class IntegrationTests(unittest.TestCase):
 
     def test_successful_port_switch_releases_old_port(self):
         old_port, new_port = free_port(), free_port(); old_process = self.start(old_port)
-        status, settings = json_request("GET", f"http://127.0.0.1:{old_port}/api/settings")
+        headers = self.login_headers(old_port)
+        status, settings = json_request("GET", f"http://127.0.0.1:{old_port}/api/settings", headers=headers)
         settings.update(server_host="127.0.0.1", server_port=str(new_port))
-        json_request("POST", f"http://127.0.0.1:{old_port}/api/settings", settings)
-        _, restart = json_request("POST", f"http://127.0.0.1:{old_port}/api/system/restart", {})
+        json_request("POST", f"http://127.0.0.1:{old_port}/api/settings", settings, headers)
+        _, restart = json_request("POST", f"http://127.0.0.1:{old_port}/api/system/restart", {}, headers)
         self.assertTrue(wait_health(old_port, up=False, timeout=15), "old port still responds")
         self.assertTrue(wait_health(new_port, timeout=25), "target port did not start")
         old_process.wait(timeout=10)
@@ -103,10 +124,11 @@ class IntegrationTests(unittest.TestCase):
         old_port, new_port = free_port(), free_port()
         self.env["APIKEYCONFIG_TEST_FAIL_TARGET"] = "1"
         old_process = self.start(old_port)
-        _, settings = json_request("GET", f"http://127.0.0.1:{old_port}/api/settings")
+        headers = self.login_headers(old_port)
+        _, settings = json_request("GET", f"http://127.0.0.1:{old_port}/api/settings", headers=headers)
         settings.update(server_host="127.0.0.1", server_port=str(new_port))
-        json_request("POST", f"http://127.0.0.1:{old_port}/api/settings", settings)
-        _, restart = json_request("POST", f"http://127.0.0.1:{old_port}/api/system/restart", {})
+        json_request("POST", f"http://127.0.0.1:{old_port}/api/settings", settings, headers)
+        _, restart = json_request("POST", f"http://127.0.0.1:{old_port}/api/system/restart", {}, headers)
         self.assertTrue(wait_health(old_port, up=False, timeout=15), "old process did not shut down")
         old_process.wait(timeout=10)
         self.assertTrue(wait_health(old_port, up=True, timeout=30), "old port was not restored")

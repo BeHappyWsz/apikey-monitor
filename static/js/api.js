@@ -1,5 +1,8 @@
 ﻿let sequence = 0;
 let activeController = null;
+let csrfToken = "";
+
+export function setCsrfToken(value) { csrfToken = String(value || ""); }
 
 export class ApiError extends Error {
   constructor(message, status, payload) { super(message); this.status = status; this.payload = payload; }
@@ -11,6 +14,7 @@ export async function request(method, path, body, { latest = false } = {}) {
   const controller = new AbortController();
   if (latest) activeController = controller;
   const options = { method, signal: controller.signal, headers: {} };
+  if ((method === "POST" || method === "PUT" || method === "DELETE") && csrfToken) options.headers["X-CSRF-Token"] = csrfToken;
   if (body !== undefined) { options.headers["Content-Type"] = "application/json"; options.body = JSON.stringify(body); }
   const response = await fetch(path, options);
   const payload = await response.json().catch(() => ({}));

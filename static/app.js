@@ -11,6 +11,7 @@ import { createListUi } from "./js/list_ui.js";
 import { initExportUi } from "./js/export_ui.js";
 import { initListActions } from "./js/list_actions.js";
 import { $, toast } from "./js/utils.js";
+import { initAuth } from "./js/auth.js";
 
 const state = {
   keys: [], selected: new Set(), status: "all", query: "", loading: true, loadError: "",
@@ -116,6 +117,7 @@ initListActions({
   exportUi,
   taskController,
 });
+const auth = initAuth({ api, openModal, closeModal, onAuthenticated: async () => { await bootApp(); } });
 
 $("#sel-all").addEventListener("change", (event) => {
   state.selected = selectCurrentResults(state.selected, getVisibleKeys(state.keys, state.status, state.query), event.target.checked);
@@ -152,7 +154,7 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) load({ silent: true }).catch(() => {});
 });
 
-async function boot() {
+async function bootApp() {
   try {
     const settings = await api("GET", "/api/settings");
     state.settings = settings || {};
@@ -161,6 +163,17 @@ async function boot() {
     applyUiRefreshInterval(15);
   }
   await load();
+}
+
+async function boot() {
+  try {
+    const result = await request("GET", "/api/auth/me");
+    auth.setAuthenticated(result.payload);
+    await bootApp();
+  } catch (error) {
+    if (error.status === 401) auth.showLogin();
+    else toast(error.message || "无法连接服务", 4200);
+  }
 }
 
 boot();

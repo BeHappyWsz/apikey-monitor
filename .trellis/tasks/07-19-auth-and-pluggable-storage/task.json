@@ -1,0 +1,29 @@
+{
+  "id": "auth-and-pluggable-storage",
+  "name": "auth-and-pluggable-storage",
+  "title": "Authentication and pluggable storage",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "BeHappyWsz",
+  "assignee": "BeHappyWsz",
+  "createdAt": "2026-07-19",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-19-secure-user-authentication",
+    "07-19-pluggable-persistence-and-migration"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

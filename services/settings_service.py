@@ -7,9 +7,8 @@ from services import restart_service
 
 class SettingsService:
     def get(self):
-        # Drop "_"-prefixed secrets/state (e.g. _webdav_password, _webdav_last_sync)
-        # so they never reach the settings API surface.
-        return {k: v for k, v in db.get_all_settings().items() if not k.startswith("_")}
+        # db filters before caching so Redis never contains credentials/state.
+        return db.get_public_settings()
 
     def validate(self, payload):
         return validators.settings_payload(payload, self.get())
