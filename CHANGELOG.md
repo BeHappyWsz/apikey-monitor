@@ -4,6 +4,28 @@
 
 ## [Unreleased]
 
+相对 0.2.0 的维护与体验增强版本；包含一次会话 cookie 名变更，已部署实例的用户需重新登录一次。
+
+### Security
+
+- 会话 cookie 重命名：浏览器持有的 `apikeyconfig_session` HttpOnly cookie 在升级后即刻失效。新 cookie 名为 `apikeymonitor_session`，与项目名对齐。
+
+### Added
+
+- 每条 Key 持久化入库时间（`created_at`，秒级 Unix 时间戳），前端卡片副标题同时显示绝对日期与相对时间（`X 分钟/小时/天前`）。已有数据库在迁移时给历史行补一个当前时间戳，避免 1970 占位
+- 列表新增 `sort` 维度：`default`（保持用户自定义顺序，兼容旧行为）、`created_desc` 与 `created_asc`（按入库时间倒序/升序）。切换排序时清空游标并从首页重新加载；非默认排序下禁用卡片拖拽（与服务端 `ORDER BY` 冲突）。`?sort=` 同时支持 `GET /api/keys` 与 `GET /api/keys/page`；游标与排序绑定，跨排序复用会被服务端拒绝为 `invalid page cursor`
+- 粘贴导入识别短词 name token（`[A-Za-z][A-Za-z0-9_-]{1,11}`，长度 2–12），落在 url/key span 之外时会作为候选 Key 的 `name` 字段
+
+### Changed
+
+- 粘贴导入配对由"相邻 token 成对"改为"段内就近配对"：每个 `key` 取前后最近的 URL，距离相等时优先取前方 URL。同一段多个 key 共享同一 URL、以及交错成对均能正确解出；经典 `OPENAI_BASE_URL=… / OPENAI_API_KEY=…` env 形态仍然有效
+- 密钥卡片头部重排：入库时间从状态面板下移到标题下方的副标题位置，状态面板恢复 `状态 / 延迟 / 最近检测` 三项，移动端无须换行
+
+### Fixed
+
+- 粘贴导入：URL 字段名前缀（如 `OPENAI_BASE_URL=`）不再被 name token 切成 `OPENAI` / `URL` 等碎片
+- 粘贴导入：URL 与未标记长 token 写在同一行时也能成对（原 `allow_unlabeled_long` 仅在 URL 出现之后的行内生效）
+
 ## [0.2.0] - 2026-07-19
 
 相对 [0.1.2] 的功能与兼容性升级版本。

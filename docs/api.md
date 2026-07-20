@@ -33,7 +33,7 @@ http://127.0.0.1:7878
 
 ```http
 GET /api/keys
-GET /api/keys/page?limit=50&cursor=&status=all&q=
+GET /api/keys/page?limit=50&cursor=&status=all&q=&sort=default
 GET /api/keys/revision
 ```
 
@@ -58,10 +58,17 @@ cursor-paged endpoint so it does not repeatedly transfer every key:
 - `limit`: optional `1`–`100`, default `50` (values outside that range are
   constrained by the server).
 - `cursor`: opaque value from the previous response's `next_cursor`; omit it
-  for the first page.
+  for the first page. Each cursor is bound to the `sort` that produced it;
+  replaying a cursor under a different `sort` returns `400 invalid_page`.
 - `status`: `all`, `up`, `down`, `auth_error`, `unknown`, `issue`, or
   `problem`.
 - `q`: optional case-insensitive search over the public list fields.
+- `sort`: `default` (user-defined `sort_order`, descending id as tiebreak —
+  matches the pre-existing behaviour), `created_desc` (most-recently imported
+  first), or `created_asc` (oldest first). When `sort` is not `default`,
+  the manual drag-to-reorder UI is disabled because the server-side
+  `ORDER BY` ignores `sort_order`. Unknown values respond with
+  `400 invalid_page`.
 
 The response is always masked and has this shape:
 
