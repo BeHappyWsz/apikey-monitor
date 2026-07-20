@@ -1,5 +1,5 @@
 import { setCsrfToken } from "./api.js";
-import { withBusyButton } from "./utils.js";
+import { formatCreatedAt, withBusyButton } from "./utils.js";
 
 export function initAuth({ api, openModal, closeModal, onAuthenticated }) {
   const gate = document.querySelector("#auth-gate");
@@ -10,11 +10,6 @@ export function initAuth({ api, openModal, closeModal, onAuthenticated }) {
   let passwordChangeRequired = false;
   let currentUserId = null;
 
-  const formatCreatedAt = (timestamp) => {
-    if (!timestamp) return "未知时间";
-    return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" })
-      .format(new Date(Number(timestamp) * 1000));
-  };
   const renderUsers = (users) => {
     if (!userList) return;
     userList.replaceChildren();

@@ -2,6 +2,7 @@
 import os
 import sqlite3
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -514,6 +515,71 @@ class DbTests(unittest.TestCase):
         self.assertEqual(db.get_all_settings()["webdavServer"], "https://dav.example.test/")
         self.assertNotIn("webdavPassword", db.get_public_settings())
         self.assertNotIn("name", db.get_public_settings())
+
+    def test_legacy_keys_get_created_at_backfilled_on_migrate(self):
+        """Pre-created_at legacy rows must get stamped with migration time."""
+        with tempfile.TemporaryDirectory() as directory:
+            legacy_path = os.path.join(directory, "legacy.db")
+            legacy = sqlite3.connect(legacy_path)
+            try:
+                # Mirror the pre-migration schema: every column init_db expects
+                # to find except for created_at (which is the column this
+                # migration introduces).
+                legacy.executescript("""
+                    CREATE TABLE keys (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT DEFAULT '', base_url TEXT NOT NULL,
+                        api_key TEXT NOT NULL, supports_anthropic INTEGER DEFAULT 0,
+                        supports_openai INTEGER DEFAULT 0, openai_status TEXT DEFAULT 'unknown',
+                        anthropic_status TEXT DEFAULT 'unknown', models TEXT DEFAULT '[]',
+                        status TEXT DEFAULT 'unknown',
+                        latency_ms INTEGER, last_check_at INTEGER, last_error TEXT DEFAULT '',
+                        monitor_enabled INTEGER DEFAULT 1, interval_sec INTEGER, notes TEXT DEFAULT '',
+                        check_model TEXT DEFAULT '', model_status TEXT DEFAULT 'unknown',
+                        model_latency_ms INTEGER, model_last_check_at INTEGER, model_last_error TEXT DEFAULT '',
+                        model_verification_version INTEGER DEFAULT 0,
+                        next_check_at INTEGER DEFAULT 0,
+                        sort_order INTEGER DEFAULT 0, check_path TEXT DEFAULT ''
+                    );
+                    CREATE TABLE settings (k TEXT PRIMARY KEY, v TEXT);
+                    CREATE TABLE users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,
+                        password_hash TEXT NOT NULL, must_change_password INTEGER DEFAULT 0,
+                        enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL
+                    );
+                    CREATE TABLE sessions (
+                        token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        csrf_token TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+                        last_seen_at INTEGER NOT NULL
+                    );
+                """)
+                legacy.execute(
+                    "INSERT INTO keys(id,name,base_url,api_key,sort_order) VALUES(?,?,?,?,?)",
+                    (1, "legacy-missing", "https://legacy.example", "sk-legacy", -10))
+                legacy.execute(
+                    "INSERT INTO keys(id,name,base_url,api_key,sort_order) VALUES(?,?,?,?,?)",
+                    (2, "legacy-zero", "https://zero.example", "sk-zero", -20))
+                legacy.commit()
+            finally:
+                legacy.close()
+            previous_path = db.DB_PATH
+            try:
+                db.DB_PATH = legacy_path
+                before = int(time.time())
+                db.init_db()
+                after = int(time.time())
+                with db.connection() as conn:
+                    columns = {row[1] for row in conn.execute("PRAGMA table_info(tbl_keys)")}
+                    stamp_a = int(conn.execute("SELECT created_at FROM tbl_keys WHERE id=1").fetchone()[0])
+                    stamp_b = int(conn.execute("SELECT created_at FROM tbl_keys WHERE id=2").fetchone()[0])
+                    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+            finally:
+                db.DB_PATH = previous_path
+        self.assertIn("created_at", columns)
+        self.assertEqual(version, 13)
+        self.assertGreaterEqual(stamp_a, before)
+        self.assertLessEqual(stamp_a, after)
+        self.assertGreaterEqual(stamp_b, before)
+        self.assertLessEqual(stamp_b, after)
 
     def test_legacy_private_setting_keys_migrate_to_camel_case(self):
         with db.connection(write=True) as conn:

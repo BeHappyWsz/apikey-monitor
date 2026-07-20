@@ -325,15 +325,21 @@ def _migrate(conn):
                       ("model_last_error", "TEXT DEFAULT ''"), ("model_verification_version", "INTEGER DEFAULT 0"),
                       ("next_check_at", "INTEGER DEFAULT 0"),
                       ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''"),
-                      ("openai_status", "TEXT DEFAULT 'unknown'"), ("anthropic_status", "TEXT DEFAULT 'unknown'")):
+                      ("openai_status", "TEXT DEFAULT 'unknown'"), ("anthropic_status", "TEXT DEFAULT 'unknown'"),
+                      ("created_at", "INTEGER")):
         if col not in cols:
             conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {col} {decl}")
+    # Stamp legacy rows that predate the created_at column with the current
+    # time, so the dashboard has a usable reference for every entry.
+    backfill_now = int(time.time())
+    conn.execute("UPDATE tbl_keys SET created_at=? WHERE created_at IS NULL OR created_at=0",
+                 (backfill_now,))
     settings_cols = {row[1] for row in conn.execute("PRAGMA table_info(tbl_settings)")}
     if "name" not in settings_cols:
         conn.execute("ALTER TABLE tbl_settings ADD COLUMN name TEXT NOT NULL DEFAULT ''")
     _migrate_setting_keys(conn)
     _backfill_setting_names(conn)
-    conn.execute("PRAGMA user_version=12")
+    conn.execute("PRAGMA user_version=13")
     _to_row = conn.execute("SELECT v FROM tbl_settings WHERE k='requestTimeoutSec'").fetchone()
     if _to_row and str(_to_row["v"]) == "15":
         conn.execute("UPDATE tbl_settings SET v='45' WHERE k='requestTimeoutSec'")
@@ -473,10 +479,20 @@ def _init_mysql():
         key_columns = {row["COLUMN_NAME"] for row in conn.execute(
             "SELECT COLUMN_NAME FROM information_schema.columns "
             "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}
-        for column in ("openai_status", "anthropic_status", "model_verification_version", "next_check_at"):
+        for column in ("openai_status", "anthropic_status", "model_verification_version", "next_check_at", "created_at"):
             if column not in key_columns:
-                declaration = "BIGINT DEFAULT 0" if column == "next_check_at" else ("TINYINT DEFAULT 0" if column == "model_verification_version" else "VARCHAR(32) DEFAULT 'unknown'")
+                declaration = (
+                    "BIGINT DEFAULT 0" if column == "next_check_at"
+                    else ("TINYINT DEFAULT 0" if column == "model_verification_version"
+                          else ("VARCHAR(32) DEFAULT 'unknown'" if column in ("openai_status", "anthropic_status")
+                                else "BIGINT"))
+                )
                 conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {column} {declaration}")
+        # Stamp legacy rows missing a created_at value with the migration time
+        # so the dashboard has a usable reference for every entry.
+        backfill_now = int(time.time())
+        conn.execute("UPDATE tbl_keys SET created_at=? WHERE created_at IS NULL OR created_at=0",
+                     (backfill_now,))
         index_names = {row["INDEX_NAME"] for row in conn.execute(
             "SELECT INDEX_NAME FROM information_schema.statistics "
             "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}

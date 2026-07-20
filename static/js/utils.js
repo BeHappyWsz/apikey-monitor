@@ -96,6 +96,17 @@ export function relativeTime(ts) {
   return `${Math.floor(diff / 86400)}天前`;
 }
 
+/**
+ * Format an absolute epoch-second timestamp as a human-readable date.
+ * Returns "未知时间" for missing values so legacy (pre-created_at) keys
+ * never render a literal "1970-01-01".
+ */
+export function formatCreatedAt(ts) {
+  if (!ts) return "未知时间";
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" })
+    .format(new Date(Number(ts) * 1000));
+}
+
 export function maskKey(key) {
   key = String(key || "");
   return key.length < 12 ? "••••••••" : `${key.slice(0, 5)}••••••${key.slice(-4)}`;

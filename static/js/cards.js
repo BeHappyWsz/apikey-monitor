@@ -1,5 +1,5 @@
 import { canReorder } from "./state.js";
-import { esc, maskKey, relativeTime, statusLabel } from "./utils.js";
+import { esc, formatCreatedAt, maskKey, relativeTime, statusLabel } from "./utils.js";
 
 /** Build HTML for a single key card. Pure string template (no DOM). */
 export function renderCard(key, state) {
@@ -23,6 +23,7 @@ export function renderCard(key, state) {
         <span class="status-main ${tone}"><i class="dot ${tone}"></i>${busy ? "检测中" : statusLabel[status] || "未知"}</span>
         <span class="status-meta"><b>${key.latency_ms == null ? "—" : `${key.latency_ms}ms`}</b><small>延迟</small></span>
         <span class="status-meta"><b>${relativeTime(key.last_check_at)}</b><small>最近检测</small></span>
+        <span class="status-meta" title="${esc(formatCreatedAt(key.created_at))}"><b>${formatCreatedAt(key.created_at)}</b><small>入库</small></span>
       </div>
     </header>
     <div class="card-body-grid">
