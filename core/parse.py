@@ -15,7 +15,6 @@ _BEARER_RE = re.compile(r"[Bb]earer\s+([A-Za-z0-9_\-.]{16,})")
 _SK_RE = re.compile(r"sk-[A-Za-z0-9_\-.]{8,}")
 _LONG_RE = re.compile(r"(?<![A-Za-z0-9_\-.])[A-Za-z0-9_\-.]{40,}")
 _FENCED_JSON_RE = re.compile(r"```(?:json)?\s*([\[{][\s\S]*?[\]}])\s*```", re.IGNORECASE)
-_MAX_URL_KEY_GAP = 4
 
 
 def _normalize_import_items(data):
@@ -103,48 +102,133 @@ def _clean_base(url: str) -> str:
         return ""
 
 
-def _find_keys(text: str, allow_unlabeled_long=False):
-    found = []
-    found.extend(m.group(1) for m in _BEARER_RE.finditer(text))
-    for m in _ASSIGN_RE.finditer(text):
+def _iter_key_tokens(line, allow_unlabeled_long=False):
+    """Yield ``(match, value)`` for each key-like token in ``line``, in source order."""
+    seen = set()
+    for m in _BEARER_RE.finditer(line):
+        v = m.group(1)
+        if v not in seen and len(v) >= 12 and not _CONTROL_RE.search(v):
+            seen.add(v)
+            yield m, v
+    for m in _ASSIGN_RE.finditer(line):
         key = m.group("key").lower()
         value = m.group("val").strip().strip("\"'`)]}")
-        if "url" not in key and "endpoint" not in key and not value.lower().startswith("http"):
-            found.append(value)
-    found.extend(m.group(0) for m in _SK_RE.finditer(text))
-    if not found and allow_unlabeled_long:
-        found.extend(m.group(0) for m in _LONG_RE.finditer(text) if not m.group(0).lower().startswith("http"))
-    seen, out = set(), []
-    for value in found:
-        if len(value) >= 12 and value not in seen and not _CONTROL_RE.search(value):
+        if "url" in key or "endpoint" in key or value.lower().startswith("http"):
+            continue
+        if not value or value in seen:
+            continue
+        if len(value) >= 12 and not _CONTROL_RE.search(value):
             seen.add(value)
-            out.append(value)
-    return out
+            yield m, value
+    for m in _SK_RE.finditer(line):
+        v = m.group(0)
+        if v not in seen:
+            seen.add(v)
+            yield m, v
+    if allow_unlabeled_long:
+        for m in _LONG_RE.finditer(line):
+            v = m.group(0)
+            if v in seen or v.lower().startswith("http"):
+                continue
+            if len(v) >= 12 and not _CONTROL_RE.search(v):
+                seen.add(v)
+                yield m, v
 
 
-def parse_paste(text: str):
+def _line_has_token(stripped):
+    """Whether the line contains any URL or key-like token (long tokens count)."""
+    if _URL_RE.search(stripped):
+        return True
+    if _BEARER_RE.search(stripped) or _SK_RE.search(stripped):
+        return True
+    for m in _ASSIGN_RE.finditer(stripped):
+        key = m.group("key").lower()
+        value = m.group("val").strip().strip("\"'`)]}")
+        if not (("url" in key or "endpoint" in key) or value.lower().startswith("http")):
+            return True
+    if _LONG_RE.search(stripped):
+        return True
+    return False
+
+
+def _split_paragraphs(text):
+    """Group token-bearing lines into paragraphs.
+
+    Blank lines, ``#`` comments, and lines that contain no URL or key-like
+    token all act as paragraph boundaries. Plain prose interleaved between a
+    URL and a token therefore breaks the pair — only physically adjacent
+    token lines can form one.
+    """
+    paragraphs, current = [], []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or not _line_has_token(stripped):
+            if current:
+                paragraphs.append(current)
+                current = []
+        else:
+            current.append(line)
+    if current:
+        paragraphs.append(current)
+    return paragraphs
+
+
+def parse_paste(text):
+    """Parse free-form paste text into ``{base_url, api_key, name}`` candidates.
+
+    Order-invariant, section-aware, adjacent pairing:
+
+    * Text is split into paragraphs by blank lines (or `#` comments). A pair is
+      only formed inside the same paragraph — empty lines are the only natural
+      "distance" boundary, so chat text long random tokens don't grab URLs.
+    * Within a paragraph, URL and key tokens are collected with their column
+      offset and merged into one sorted stream.
+    * Adjacent tokens in the stream are paired off: only ``(url, key)`` or
+      ``(key, url)`` yields a candidate. Same-kind neighbours are skipped, so
+      ``url, url, key`` produces one pair (the trailing ``key`` is dropped as
+      unpaired) and ``key, key, url`` likewise produces one pair. This keeps
+      the pairing strictly "next to each other" regardless of which one
+      appeared first.
+    """
     if not text or not text.strip():
         return []
-    entries, pending_url, pending_age = [], None, 0
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        urls = [u for u in (_clean_base(v.rstrip(".,;:!?)]}")) for v in _URL_RE.findall(line)) if u]
-        keys = _find_keys(line, allow_unlabeled_long=bool(urls))
-        line_url = urls[0] if urls else None
-        if line_url and keys:
-            entries.extend({"base_url": line_url, "api_key": key, "name": ""} for key in keys)
-            pending_url, pending_age = None, 0
-        elif line_url:
-            pending_url, pending_age = line_url, 0
-        elif keys and pending_url and pending_age <= _MAX_URL_KEY_GAP:
-            entries.extend({"base_url": pending_url, "api_key": key, "name": ""} for key in keys)
-            pending_url, pending_age = None, 0
-        elif pending_url:
-            pending_age += 1
-            if pending_age > _MAX_URL_KEY_GAP:
-                pending_url = None
+
+    entries = []
+    for paragraph_lines in _split_paragraphs(text):
+        # Compute the start column of each line so positions stay comparable
+        # when multiple lines live in one paragraph.
+        line_offsets = []
+        offset = 0
+        for line in paragraph_lines:
+            line_offsets.append(offset)
+            offset += len(line) + 1  # +1 for newline
+
+        url_seen = False
+        tokens = []  # (pos, kind, value)
+        for line_idx, line in enumerate(paragraph_lines):
+            base = line_offsets[line_idx]
+            for um in _URL_RE.finditer(line):
+                raw = um.group(0).rstrip(".,;:!?)]}")
+                cleaned = _clean_base(raw)
+                if cleaned:
+                    tokens.append((base + um.start(), "url", cleaned))
+                    url_seen = True
+            for km, value in _iter_key_tokens(line, allow_unlabeled_long=url_seen):
+                tokens.append((base + km.start(), "key", value))
+
+        tokens.sort(key=lambda t: t[0])
+        # Adjacent pairing; order-independent; same-kind neighbours are skipped.
+        i = 0
+        while i + 1 < len(tokens):
+            a, b = tokens[i], tokens[i + 1]
+            if {a[1], b[1]} == {"url", "key"}:
+                url_value = a[2] if a[1] == "url" else b[2]
+                key_value = a[2] if a[1] == "key" else b[2]
+                entries.append({"base_url": url_value, "api_key": key_value, "name": ""})
+                i += 2
+            else:
+                i += 1
+
     seen, out = set(), []
     for item in entries:
         marker = (item["base_url"], item["api_key"])

@@ -191,6 +191,59 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(len(parsed), 1)
         self.assertEqual(parsed[0]["base_url"], "https://gateway.example/v1")
 
+    def test_parse_import_key_before_url_on_same_line(self):
+        parsed = core.parse_import_text("sk-aaaaaaaaaaaa A=https://a.example")
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]["base_url"], "https://a.example")
+        self.assertEqual(parsed[0]["api_key"], "sk-aaaaaaaaaaaa")
+
+    def test_parse_import_key_then_url_on_adjacent_lines(self):
+        parsed = core.parse_import_text("sk-aaaaaaaaaaaa\nOPENAI_BASE_URL=https://a.example")
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]["base_url"], "https://a.example")
+        self.assertEqual(parsed[0]["api_key"], "sk-aaaaaaaaaaaa")
+
+    def test_parse_import_handles_multiple_pairs_in_one_block(self):
+        text = (
+            "sk-aaaaaaaaaaaa https://a.example sk-bbbbbbbbbbbb https://b.example"
+        )
+        parsed = core.parse_import_text(text)
+        pairs = {(item["base_url"], item["api_key"]) for item in parsed}
+        self.assertEqual(pairs, {
+            ("https://a.example", "sk-aaaaaaaaaaaa"),
+            ("https://b.example", "sk-bbbbbbbbbbbb"),
+        })
+
+    def test_parse_import_pairs_mixed_order_within_paragraph(self):
+        text = (
+            "sk-aaaaaaaaaaaa\n"
+            "https://a.example\n"
+            "sk-bbbbbbbbbbbb\n"
+            "https://b.example"
+        )
+        parsed = core.parse_import_text(text)
+        self.assertEqual([(item["api_key"], item["base_url"]) for item in parsed], [
+            ("sk-aaaaaaaaaaaa", "https://a.example"),
+            ("sk-bbbbbbbbbbbb", "https://b.example"),
+        ])
+
+    def test_parse_import_skips_same_kind_neighbours(self):
+        text = "sk-aaaaaaaaaaaa sk-bbbbbbbbbbbb sk-cccccccccccc https://a.example"
+        parsed = core.parse_import_text(text)
+        # Only one URL is present so only one pair can form; the second key is
+        # dropped as unpaired rather than reused.
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]["base_url"], "https://a.example")
+        self.assertEqual(parsed[0]["api_key"], "sk-cccccccccccc")
+
+    def test_parse_import_does_not_pair_across_tokenless_lines(self):
+        text = (
+            "https://a.example\n"
+            "这是一段说明文字\n"
+            "sk-aaaaaaaaaaaa"
+        )
+        self.assertEqual(core.parse_import_text(text), [])
+
     def test_export_roundtrip_fields(self):
         entry = {"name": "n", "base_url": "https://example.com/v1", "api_key": "sk-demo-key-xx", "check_model": "m"}
         text = core.export_config(entry, "json")
