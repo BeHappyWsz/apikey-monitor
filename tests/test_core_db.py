@@ -228,14 +228,41 @@ class CoreTests(unittest.TestCase):
             ("sk-bbbbbbbbbbbb", "https://b.example"),
         ])
 
-    def test_parse_import_skips_same_kind_neighbours(self):
+    def test_parse_import_shares_one_url_across_keys(self):
+        """A trailing URL acts as a shared gateway for every key in the same block."""
         text = "sk-aaaaaaaaaaaa sk-bbbbbbbbbbbb sk-cccccccccccc https://a.example"
         parsed = core.parse_import_text(text)
-        # Only one URL is present so only one pair can form; the second key is
-        # dropped as unpaired rather than reused.
+        pairs = {(item["api_key"], item["base_url"]) for item in parsed}
+        self.assertEqual(pairs, {
+            ("sk-aaaaaaaaaaaa", "https://a.example"),
+            ("sk-bbbbbbbbbbbb", "https://a.example"),
+            ("sk-cccccccccccc", "https://a.example"),
+        })
+
+    def test_parse_import_recognises_short_name_tokens(self):
+        """Short identifiers (``gpt`` / ``grok``) attach to the next key
+        as the candidate ``name`` field, and the trailing URL pairs with
+        every key in the block."""
+        text = (
+            "gpt\n"
+            "sk-67cPBY14bpAgfkaDXDINGGF9eGDMngJz\n"
+            "grok\n"
+            "sk-8lIaur3S2i5Xpi3yfXbiVVZLoF0mTpBy\n"
+            "https://ai2.hhhl.cc/v1/"
+        )
+        parsed = core.parse_import_text(text)
+        self.assertEqual([(item["name"], item["api_key"], item["base_url"]) for item in parsed], [
+            ("gpt", "sk-67cPBY14bpAgfkaDXDINGGF9eGDMngJz", "https://ai2.hhhl.cc/v1"),
+            ("grok", "sk-8lIaur3S2i5Xpi3yfXbiVVZLoF0mTpBy", "https://ai2.hhhl.cc/v1"),
+        ])
+
+    def test_parse_import_name_token_picks_closest_preceding(self):
+        text = "gpt\nopenai\nsk-aaaaaaaaaaaa\nhttps://a.example"
+        parsed = core.parse_import_text(text)
         self.assertEqual(len(parsed), 1)
-        self.assertEqual(parsed[0]["base_url"], "https://a.example")
-        self.assertEqual(parsed[0]["api_key"], "sk-cccccccccccc")
+        # Only `openai` should reach the key as a name; `gpt` is overwritten
+        # by the closer `openai` standing directly above the key.
+        self.assertEqual(parsed[0]["name"], "openai")
 
     def test_parse_import_does_not_pair_across_tokenless_lines(self):
         text = (

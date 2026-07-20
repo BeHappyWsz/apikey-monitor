@@ -14,6 +14,11 @@ _ASSIGN_RE = re.compile(
 _BEARER_RE = re.compile(r"[Bb]earer\s+([A-Za-z0-9_\-.]{16,})")
 _SK_RE = re.compile(r"sk-[A-Za-z0-9_\-.]{8,}")
 _LONG_RE = re.compile(r"(?<![A-Za-z0-9_\-.])[A-Za-z0-9_\-.]{40,}")
+# Plain short identifiers (e.g. ``gpt``, ``grok-3``, ``claude_opus``) that act
+# as provider/alias labels. They are not matched by any url/key regex above,
+# so they survive only as candidate ``name`` tokens once the url/key span
+# pass has claimed the surrounding characters.
+_NAME_TOKEN_RE = re.compile(r"([A-Za-z][A-Za-z0-9_-]{1,11})")
 _FENCED_JSON_RE = re.compile(r"```(?:json)?\s*([\[{][\s\S]*?[\]}])\s*```", re.IGNORECASE)
 
 
@@ -102,51 +107,93 @@ def _clean_base(url: str) -> str:
         return ""
 
 
-def _iter_key_tokens(line, allow_unlabeled_long=False):
-    """Yield ``(match, value)`` for each key-like token in ``line``, in source order."""
-    seen = set()
+def _iter_tokens(line, allow_unlabeled_long=False):
+    """Yield ``(pos, kind, value)`` for each token in ``line``.
+
+    ``kind`` is one of ``"url"``, ``"key"`` and ``"name"``. URL and key spans
+    are scanned first so that the subsequent name pass never reads into a span
+    already claimed by a longer regex match (e.g. ``https`` inside a URL is
+    not also a name).
+    """
+    claimed_spans = []
+
+    # URLs (caller hands the raw match; the surrounding punctuation stripper
+    # lives there so it can also peek at base-urls without shaping them).
+    for m in _URL_RE.finditer(line):
+        cleaned = _clean_base(m.group(0).rstrip(".,;:!?)]}"))
+        if cleaned:
+            yield (m.start(), "url", cleaned)
+            claimed_spans.append((m.start(), m.end()))
+
+    # Bearer tokens, sk- prefixed keys, and assignment-shaped keys never
+    # overlap a URL because of their explicit leading punctuation.
+    def _emit_key(m_start, m_end, value):
+        yield (m_start, "key", value)
+        claimed_spans.append((m_start, m_end))
+
     for m in _BEARER_RE.finditer(line):
         v = m.group(1)
-        if v not in seen and len(v) >= 12 and not _CONTROL_RE.search(v):
-            seen.add(v)
-            yield m, v
+        if not _CONTROL_RE.search(v):
+            yield (m.start(), "key", v)
+            claimed_spans.append((m.start(), m.end()))
+
     for m in _ASSIGN_RE.finditer(line):
-        key = m.group("key").lower()
+        key_name = m.group("key").lower()
         value = m.group("val").strip().strip("\"'`)]}")
-        if "url" in key or "endpoint" in key or value.lower().startswith("http"):
+        # Reserve the whole "key=value" range up front so name-token
+        # scanning does not slice the assignment prefix into fragments.
+        claimed_spans.append((m.start(), m.end()))
+        if "url" in key_name or "endpoint" in key_name:
+            if value and not _CONTROL_RE.search(value):
+                cleaned = _clean_base(value.rstrip(".,;:!?)]}"))
+                if cleaned:
+                    yield (m.start(), "url", cleaned)
             continue
-        if not value or value in seen:
+        if value.lower().startswith("http"):
+            cleaned = _clean_base(value.rstrip(".,;:!?)]}"))
+            if cleaned:
+                yield (m.start(), "url", cleaned)
             continue
-        if len(value) >= 12 and not _CONTROL_RE.search(value):
-            seen.add(value)
-            yield m, value
+        if not value or _CONTROL_RE.search(value):
+            continue
+        yield (m.start(), "key", value)
+
     for m in _SK_RE.finditer(line):
-        v = m.group(0)
-        if v not in seen:
-            seen.add(v)
-            yield m, v
+        yield (m.start(), "key", m.group(0))
+        claimed_spans.append((m.start(), m.end()))
+
+    # Unlabeled long tokens only count once a URL has appeared earlier in
+    # the same paragraph — they would otherwise drag chat noise into the
+    # pair list.
     if allow_unlabeled_long:
         for m in _LONG_RE.finditer(line):
-            v = m.group(0)
-            if v in seen or v.lower().startswith("http"):
-                continue
-            if len(v) >= 12 and not _CONTROL_RE.search(v):
-                seen.add(v)
-                yield m, v
+            yield (m.start(), "key", m.group(0))
+            claimed_spans.append((m.start(), m.end()))
+
+    # Names — short identifiers (2..12 chars) sitting outside any url/key
+    # span. They give typical "gpt / sk-… / grok / sk-… / https://…"
+    # copy-paste blocks a usable ``name`` field for each key.
+    for nm in _NAME_TOKEN_RE.finditer(line):
+        s, e = nm.start(), nm.end()
+        if any(cs <= s and e <= ce for cs, ce in claimed_spans):
+            continue
+        yield (s, "name", nm.group(0))
 
 
 def _line_has_token(stripped):
-    """Whether the line contains any URL or key-like token (long tokens count)."""
+    """Whether the line carries any URL/key/name-like token."""
     if _URL_RE.search(stripped):
         return True
     if _BEARER_RE.search(stripped) or _SK_RE.search(stripped):
         return True
     for m in _ASSIGN_RE.finditer(stripped):
-        key = m.group("key").lower()
+        key_name = m.group("key").lower()
         value = m.group("val").strip().strip("\"'`)]}")
-        if not (("url" in key or "endpoint" in key) or value.lower().startswith("http")):
+        if not (("url" in key_name or "endpoint" in key_name) or value.lower().startswith("http")):
             return True
     if _LONG_RE.search(stripped):
+        return True
+    if _NAME_TOKEN_RE.search(stripped):
         return True
     return False
 
@@ -176,58 +223,98 @@ def _split_paragraphs(text):
 def parse_paste(text):
     """Parse free-form paste text into ``{base_url, api_key, name}`` candidates.
 
-    Order-invariant, section-aware, adjacent pairing:
+    Order-invariant, section-aware, forward matching:
 
-    * Text is split into paragraphs by blank lines (or `#` comments). A pair is
-      only formed inside the same paragraph — empty lines are the only natural
-      "distance" boundary, so chat text long random tokens don't grab URLs.
-    * Within a paragraph, URL and key tokens are collected with their column
-      offset and merged into one sorted stream.
-    * Adjacent tokens in the stream are paired off: only ``(url, key)`` or
-      ``(key, url)`` yields a candidate. Same-kind neighbours are skipped, so
-      ``url, url, key`` produces one pair (the trailing ``key`` is dropped as
-      unpaired) and ``key, key, url`` likewise produces one pair. This keeps
-      the pairing strictly "next to each other" regardless of which one
-      appeared first.
+    * Text is split into paragraphs by blank lines, ``#`` comments, or any
+      line that carries no URL / key / name token. Plain prose interleaved
+      between a URL and a key therefore breaks the pair — only tokens in the
+      same paragraph may form a candidate.
+    * Within a paragraph, URL / key / name tokens are merged into one stream
+      sorted by column offset.
+    * Each ``key`` token is paired with the **next URL that appears after
+      it** in the stream. This naturally supports both:
+        - one URL shared by many keys (``3 keys + 1 url`` gives 3 pairs),
+        - one URL per key (``url_a url_b`` interleaved still resolves).
+      Same-kind neighbours (``key, key`` or ``url, url``) are ignored.
+    * Each emitted key carries the closest ``name`` token preceding it in
+      the paragraph, so a copy like ``gpt / sk-… / grok / sk-… / https``
+      produces entries with ``name="gpt"`` and ``name="grok"``.
     """
     if not text or not text.strip():
         return []
 
     entries = []
     for paragraph_lines in _split_paragraphs(text):
-        # Compute the start column of each line so positions stay comparable
-        # when multiple lines live in one paragraph.
         line_offsets = []
         offset = 0
         for line in paragraph_lines:
             line_offsets.append(offset)
             offset += len(line) + 1  # +1 for newline
 
-        url_seen = False
-        tokens = []  # (pos, kind, value)
+        # Unlabeled long tokens only count once the whole paragraph has
+        # touched a URL; using a paragraph-level flag avoids the per-line
+        # race where a URL and the surrounding text sit on the same line.
+        paragraph_has_url = any(_URL_RE.search(line) for line in paragraph_lines)
+        tokens = []
         for line_idx, line in enumerate(paragraph_lines):
             base = line_offsets[line_idx]
-            for um in _URL_RE.finditer(line):
-                raw = um.group(0).rstrip(".,;:!?)]}")
-                cleaned = _clean_base(raw)
-                if cleaned:
-                    tokens.append((base + um.start(), "url", cleaned))
-                    url_seen = True
-            for km, value in _iter_key_tokens(line, allow_unlabeled_long=url_seen):
-                tokens.append((base + km.start(), "key", value))
+            for pos, kind, value in _iter_tokens(line, allow_unlabeled_long=paragraph_has_url):
+                tokens.append((base + pos, kind, value))
 
+        if not tokens:
+            continue
         tokens.sort(key=lambda t: t[0])
-        # Adjacent pairing; order-independent; same-kind neighbours are skipped.
-        i = 0
-        while i + 1 < len(tokens):
-            a, b = tokens[i], tokens[i + 1]
-            if {a[1], b[1]} == {"url", "key"}:
-                url_value = a[2] if a[1] == "url" else b[2]
-                key_value = a[2] if a[1] == "key" else b[2]
-                entries.append({"base_url": url_value, "api_key": key_value, "name": ""})
-                i += 2
-            else:
-                i += 1
+
+        # Index the closest url on each side of every position. A key token
+        # picks whichever neighbour is nearer; ties go to the preceding url
+        # so classic `OPENAI_BASE_URL=... \n OPENAI_API_KEY=...` patterns
+        # still resolve. This combines the two complementary semantics:
+        #   - many keys share one URL (multiple keys, single trailing url
+        #     gives every key that url because they're all "closer" to it
+        #     than to nothing else);
+        #   - many URLs serve many keys (interleaved ``key url key url``
+        #     pairs each key with the nearest neighbouring URL).
+        before_url = {}
+        last_pos, last_value = None, None
+        for pos, kind, value in tokens:
+            before_url[pos] = (last_pos, last_value)
+            if kind == "url":
+                last_pos, last_value = pos, value
+        after_url = {}
+        last_pos, last_value = None, None
+        for pos, kind, value in reversed(tokens):
+            after_url[pos] = (last_pos, last_value)
+            if kind == "url":
+                last_pos, last_value = pos, value
+
+        # Pre-compute the closest preceding name token so each key inherits
+        # the nearest label even when many names appear together.
+        running_name = ""
+        name_by_pos = {}
+        for pos, kind, value in tokens:
+            name_by_pos[pos] = running_name
+            if kind == "name":
+                running_name = value
+
+        for pos, kind, value in tokens:
+            if kind != "key":
+                continue
+            b_pos, b_value = before_url[pos]
+            a_pos, a_value = after_url[pos]
+            b_distance = pos - b_pos if b_pos is not None else None
+            a_distance = a_pos - pos if a_pos is not None else None
+            chosen = None
+            if b_distance is not None and (a_distance is None or b_distance <= a_distance):
+                chosen = b_value
+            elif a_distance is not None:
+                chosen = a_value
+            if chosen is None:
+                continue
+            entries.append({
+                "base_url": chosen,
+                "api_key": value,
+                "name": name_by_pos[pos],
+            })
 
     seen, out = set(), []
     for item in entries:
