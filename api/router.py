@@ -58,7 +58,7 @@ def _authenticated_session(method, path, server, request):
     public = path == "/api/system/health" or path == "/api/auth/bootstrap" or (method == "POST" and path == "/api/auth/login")
     if public:
         return None
-    session = AUTH.current((request or {}).get("cookies", {}).get("apikeyconfig_session", ""))
+    session = AUTH.current((request or {}).get("cookies", {}).get("apikeymonitor_session", ""))
     if not session:
         raise ApiError(401, "unauthenticated", "请先登录")
     if method in ("POST", "PUT", "DELETE") and not AUTH.csrf_valid(session, (request or {}).get("csrf_token", "")):
@@ -94,7 +94,7 @@ def route(method, path, query, body, server, request=None):
             "Set-Cookie": AUTH.session_cookie(result["token"], _secure_cookie(request, server))
         }
     if method == "POST" and path == "/api/auth/logout":
-        AUTH.logout(request.get("cookies", {}).get("apikeyconfig_session", ""))
+        AUTH.logout(request.get("cookies", {}).get("apikeymonitor_session", ""))
         return 200, {"ok": True}, {"Set-Cookie": AUTH.session_cookie("", _secure_cookie(request, server), clear=True)}
     if method == "GET" and path == "/api/auth/me":
         return 200, {"user": session["user"], "csrf_token": session["csrf_token"]}

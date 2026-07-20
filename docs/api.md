@@ -3,7 +3,7 @@
 ## Authentication
 
 Except `GET /api/system/health`, `GET /api/auth/bootstrap`, and
-`POST /api/auth/login`, API routes require the `apikeyconfig_session` HttpOnly
+`POST /api/auth/login`, API routes require the `apikeymonitor_session` HttpOnly
 cookie. Unsafe requests also require `X-CSRF-Token` from `GET /api/auth/me`.
 
 | Route | Purpose |

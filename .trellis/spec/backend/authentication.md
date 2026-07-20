@@ -18,7 +18,7 @@ roles or tenants.
 
 - First start reads `_bootstrap_admin_username` and `_bootstrap_admin_password`
   from the private startup `config.json`. Passwords are Argon2id hashes only.
-- Login returns `{user:{id,username}, csrf_token}` and sets the raw opaque token only in the `apikeyconfig_session` HttpOnly cookie.
+- Login returns `{user:{id,username}, csrf_token}` and sets the raw opaque token only in the `apikeymonitor_session` HttpOnly cookie.
 - `GET /api/auth/me` returns the per-session CSRF token. Every cookie-authenticated POST/PUT/DELETE sends it as `X-CSRF-Token`.
 - `APIKEYCONFIG_TRUST_PROXY=1` is required when binding publicly; trust forwarded HTTPS only in that mode.
 

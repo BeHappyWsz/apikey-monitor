@@ -174,7 +174,7 @@ class AuthService:
 
     @staticmethod
     def session_cookie(token, secure=False, clear=False):
-        parts = ["apikeyconfig_session=" + ("" if clear else token), "Path=/", "HttpOnly", "SameSite=Lax"]
+        parts = ["apikeymonitor_session=" + ("" if clear else token), "Path=/", "HttpOnly", "SameSite=Lax"]
         if clear:
             parts.append("Max-Age=0")
         else:
