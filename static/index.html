@@ -72,6 +72,11 @@
         <button class="seg" data-status="problem" type="button" title="非在线项（离线/失效/异常/未知）">问题 <b id="cnt-problem">0</b></button>
         <button class="seg" data-status="unknown" type="button">未知 <b id="cnt-unknown">0</b></button>
       </div>
+      <div class="status-filter sort-filter" id="sort-filter" aria-label="排序方式">
+        <button class="seg active" data-sort="default" type="button" title="按用户设置的顺序">默认顺序</button>
+        <button class="seg" data-sort="created_desc" type="button" title="最近入库的排最前">入库↓</button>
+        <button class="seg" data-sort="created_asc" type="button" title="最早入库的排最前">入库↑</button>
+      </div>
       <input type="search" id="filter" class="filter" placeholder="搜索 名称 / base_url / 模型…">
     </div>
   </section>

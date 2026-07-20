@@ -5,9 +5,9 @@ from services.task_service import TASKS
 
 
 class KeyService:
-    def list(self, public=True): return db.list_keys(public=public)
-    def page(self, limit=50, cursor="", status_filter="all", search=""):
-        return db.list_keys_page(limit, cursor, status_filter, search)
+    def list(self, public=True, sort="default"): return db.list_keys(public=public, sort=sort)
+    def page(self, limit=50, cursor="", status_filter="all", search="", sort="default"):
+        return db.list_keys_page(limit, cursor, status_filter, search, sort=sort)
     def get(self, key_id, public=False): return db.get_key(key_id, public=public)
     def secret(self, key_id):
         entry = db.get_key(key_id)

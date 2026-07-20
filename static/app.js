@@ -23,7 +23,7 @@ LoadingBar();
 const listBusy = BusyOverlay(document.getElementById("key-list"), { text: "正在刷新…" });
 
 const state = {
-  keys: [], selected: new Set(), status: "all", query: "", loading: true, loadError: "",
+  keys: [], selected: new Set(), status: "all", query: "", sort: "default", loading: true, loadError: "",
   checking: new Set(), editId: null, exportId: null, exportMode: "single", modelId: null,
   candidates: [], candidateSelected: new Set(), settings: {}, runtime: {}, draggingId: null,
   fingerprint: "",
@@ -40,7 +40,7 @@ async function api(method, path, body, options) {
 const listUi = {};
 
 function pagePath(cursor = "") {
-  const params = new URLSearchParams({ limit: "50", status: state.status || "all" });
+  const params = new URLSearchParams({ limit: "50", status: state.status || "all", sort: state.sort || "default" });
   if (state.query.trim()) params.set("q", state.query.trim());
   if (cursor) params.set("cursor", cursor);
   return `/api/keys/page?${params}`;
@@ -145,6 +145,18 @@ $("#filter").addEventListener("input", (event) => {
 $("#status-filter").addEventListener("click", (event) => {
   const button = event.target.closest(".seg");
   if (button && button.dataset.status !== state.status) { state.status = button.dataset.status; load(); }
+});
+$("#sort-filter").addEventListener("click", (event) => {
+  const button = event.target.closest(".seg");
+  if (!button) return;
+  const next = button.dataset.sort || "default";
+  if (next === state.sort) return;
+  state.sort = next;
+  // Sort changes invalidate any in-flight next-cursor; force a fresh page.
+  state.nextCursor = "";
+  state.hasMore = false;
+  $$("#sort-filter .seg").forEach((item) => item.classList.toggle("active", item.dataset.sort === state.sort));
+  load();
 });
 $("#btn-refresh").addEventListener("click", () => { exportUi.closeMoreMenu(); load(); });
 

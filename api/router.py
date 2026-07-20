@@ -126,13 +126,15 @@ def route(method, path, query, body, server, request=None):
         except ValueError as exc:
             raise ApiError(400, "invalid_user", str(exc))
     if method == "GET" and path == "/api/keys":
-        return 200, KEYS.list()
+        params = parse_qs(query)
+        return 200, KEYS.list(sort=params.get("sort", ["default"])[0])
     if method == "GET" and path == "/api/keys/page":
         params = parse_qs(query)
         try:
             limit = int(params.get("limit", ["50"])[0])
             return 200, KEYS.page(limit, params.get("cursor", [""])[0],
-                                  params.get("status", ["all"])[0], params.get("q", [""])[0])
+                                  params.get("status", ["all"])[0], params.get("q", [""])[0],
+                                  sort=params.get("sort", ["default"])[0])
         except ValueError as exc:
             raise ApiError(400, "invalid_page", str(exc))
     if method == "GET" and path == "/api/keys/revision":

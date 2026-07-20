@@ -660,14 +660,15 @@ def public_key(entry, include_secret=False):
     return out
 
 
-def list_keys(public=False):
+def list_keys(public=False, sort="default"):
+    sort = _normalize_sort(sort)
     cache_name = f"{_PUBLIC_KEY_CACHE_PREFIX}list"
     if public:
         cached = _cache_get(cache_name)
         if cached is not None: return cached
+    order_by = _page_order_by(sort)
     with connection() as conn:
-        rows = [_row_to_dict(row) for row in conn.execute(
-            "SELECT * FROM tbl_keys ORDER BY CASE WHEN sort_order=0 THEN 1 ELSE 0 END, sort_order ASC, id DESC")]
+        rows = [_row_to_dict(row) for row in conn.execute(f"SELECT * FROM tbl_keys ORDER BY {order_by}")]
     if public:
         result = [public_key(row) for row in rows]
         _cache_set(cache_name, result)
@@ -682,22 +683,66 @@ _PAGE_STATUSES = {
 }
 
 
-def _page_cursor_encode(group, sort_order, key_id):
-    raw = json.dumps([int(group), int(sort_order), int(key_id)], separators=(",", ":")).encode("ascii")
+_SORT_KEYS = ("default", "created_desc", "created_asc")
+_SORT_ORDER_BY = {
+    "default": "CASE WHEN sort_order=0 THEN 1 ELSE 0 END ASC, sort_order ASC, id DESC",
+    "created_desc": "created_at DESC, id DESC",
+    "created_asc": "created_at ASC, id ASC",
+}
+
+
+def _page_cursor_encode(sort, group, anchor, key_id):
+    """Encode a stable cursor. ``group`` is 0 for manually ordered rows or 1 for
+    auto rows; ``anchor`` is ``sort_order`` for ``default`` and ``created_at`` for
+    the created_* sorts."""
+    payload = {"s": str(sort), "g": int(group), "a": int(anchor), "k": int(key_id)}
+    raw = json.dumps(payload, separators=(",", ":")).encode("ascii")
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
-def _page_cursor_decode(value):
+def _page_cursor_decode(value, expected_sort=None):
+    """Decode a cursor; raises ``ValueError`` if it is malformed or was issued
+    by a different sort. Legacy list cursors are read as ``sort=default`` for
+    backwards compatibility."""
     if not value:
         return None
     try:
         padded = str(value) + "=" * (-len(str(value)) % 4)
-        group, sort_order, key_id = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
-        if group not in (0, 1) or int(key_id) <= 0:
-            raise ValueError
-        return int(group), int(sort_order), int(key_id)
+        decoded = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
     except Exception as exc:
         raise ValueError("invalid page cursor") from exc
+    if isinstance(decoded, list) and len(decoded) == 3:
+        if expected_sort and expected_sort != "default":
+            raise ValueError("invalid page cursor")
+        group, anchor, key_id = decoded
+        sort = "default"
+    elif isinstance(decoded, dict):
+        sort = str(decoded.get("s") or "default")
+        if expected_sort and sort != expected_sort:
+            raise ValueError("invalid page cursor")
+        group = decoded.get("g")
+        anchor = decoded.get("a")
+        key_id = decoded.get("k")
+    else:
+        raise ValueError("invalid page cursor")
+    try:
+        group, anchor, key_id = int(group), int(anchor), int(key_id)
+    except (TypeError, ValueError):
+        raise ValueError("invalid page cursor")
+    if group not in (0, 1) or key_id <= 0:
+        raise ValueError("invalid page cursor")
+    return sort, group, anchor, key_id
+
+
+def _page_order_by(sort):
+    return _SORT_ORDER_BY.get(sort) or _SORT_ORDER_BY["default"]
+
+
+def _normalize_sort(sort):
+    value = str(sort or "default")
+    if value not in _SORT_KEYS:
+        raise ValueError("invalid sort")
+    return value
 
 
 def _page_conditions(status_filter="all", search=""):
@@ -736,23 +781,39 @@ def _page_summary(conn, conditions, values):
     }
 
 
-def list_keys_page(limit=50, cursor="", status_filter="all", search=""):
+def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="default"):
     """Return one stable-order public page without shipping the entire key list."""
+    sort = _normalize_sort(sort)
     limit = max(1, min(int(limit), 100))
     facet_conditions, facet_values = _page_conditions("all", search)
     base_conditions, base_values = _page_conditions(status_filter, search)
-    cursor_parts = _page_cursor_decode(cursor)
+    cursor_parts = _page_cursor_decode(cursor, expected_sort=sort)
     conditions, values = list(base_conditions), list(base_values)
-    order_group = "CASE WHEN sort_order=0 THEN 1 ELSE 0 END"
+    order_by = _page_order_by(sort)
     if cursor_parts:
-        group, sort_order, key_id = cursor_parts
-        conditions.append(f"({order_group}>? OR ({order_group}=? AND (sort_order>? OR (sort_order=? AND id<?))))")
-        values.extend([group, group, sort_order, sort_order, key_id])
+        decoded_sort, group, anchor, key_id = cursor_parts
+        if decoded_sort != sort:
+            raise ValueError("invalid page cursor")
+        if sort == "default":
+            conditions.append(
+                "(CASE WHEN sort_order=0 THEN 1 ELSE 0 END>? OR "
+                "(CASE WHEN sort_order=0 THEN 1 ELSE 0 END=? AND "
+                "(sort_order>? OR (sort_order=? AND id<?))))"
+            )
+            values.extend([group, group, anchor, anchor, key_id])
+        elif sort == "created_desc":
+            # Order is created_at DESC, id DESC — the next row is strictly
+            # smaller created_at, or equal created_at with a smaller id.
+            conditions.append("(created_at<? OR (created_at=? AND id<?))")
+            values.extend([anchor, anchor, key_id])
+        else:  # created_asc — ASC, ASC
+            conditions.append("(created_at>? OR (created_at=? AND id>?))")
+            values.extend([anchor, anchor, key_id])
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     base_where = (" WHERE " + " AND ".join(base_conditions)) if base_conditions else ""
     with connection() as conn:
         rows = [_row_to_dict(row) for row in conn.execute(
-            f"SELECT * FROM tbl_keys{where} ORDER BY {order_group} ASC, sort_order ASC, id DESC LIMIT ?",
+            f"SELECT * FROM tbl_keys{where} ORDER BY {order_by} LIMIT ?",
             [*values, limit + 1]).fetchall()]
         summary = _page_summary(conn, facet_conditions, facet_values)
         total_row = conn.execute(f"SELECT COUNT(*) AS c FROM tbl_keys{base_where}", base_values).fetchone()
@@ -762,8 +823,13 @@ def list_keys_page(limit=50, cursor="", status_filter="all", search=""):
     next_cursor = ""
     if has_more and items:
         last = items[-1]
-        next_cursor = _page_cursor_encode(1 if int(last.get("sort_order") or 0) == 0 else 0,
-                                           int(last.get("sort_order") or 0), int(last["id"]))
+        if sort == "default":
+            next_cursor = _page_cursor_encode(sort,
+                                             1 if int(last.get("sort_order") or 0) == 0 else 0,
+                                             int(last.get("sort_order") or 0), int(last["id"]))
+        else:
+            next_cursor = _page_cursor_encode(sort, 0,
+                                             int(last.get("created_at") or 0), int(last["id"]))
     return {"items": [public_key(row) for row in items], "next_cursor": next_cursor,
             "total": total,
             "summary": summary, "revision": get_list_revision()}

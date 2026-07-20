@@ -87,7 +87,7 @@ export function initListActions({
   });
 
   $("#key-list").addEventListener("dragstart", (event) => {
-    if (!canReorder(state.status, state.query)) return event.preventDefault();
+    if (!canReorder(state.status, state.query, state.sort)) return event.preventDefault();
     // Whole-card drag: do not start reorder from interactive controls.
     if (event.target.closest("button, input, a, select, textarea, label, summary, .url-copy")) {
       return event.preventDefault();
@@ -101,7 +101,7 @@ export function initListActions({
   });
 
   $("#key-list").addEventListener("dragover", (event) => {
-    if (!state.draggingId || !canReorder(state.status, state.query)) return;
+    if (!state.draggingId || !canReorder(state.status, state.query, state.sort)) return;
     const cardEl = event.target.closest(".key-card");
     if (!cardEl || Number(cardEl.dataset.id) === state.draggingId) return;
     event.preventDefault();
@@ -116,7 +116,7 @@ export function initListActions({
     const target = event.target.closest(".key-card");
     const sourceId = state.draggingId;
     clearDragState();
-    if (!sourceId || !target || !canReorder(state.status, state.query)) return;
+    if (!sourceId || !target || !canReorder(state.status, state.query, state.sort)) return;
     const targetId = Number(target.dataset.id);
     const previous = state.keys;
     state.keys = moveKey(state.keys, sourceId, targetId);

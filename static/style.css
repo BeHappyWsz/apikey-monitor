@@ -181,6 +181,7 @@ body {
   display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--border);
   border-radius: 10px; background: var(--panel2);
 }
+.sort-filter { flex-wrap: nowrap; }
 .seg {
   border: 0; background: transparent; color: var(--muted); border-radius: 8px;
   padding: 6px 9px; cursor: pointer; font-size: 12px; white-space: nowrap;
@@ -503,6 +504,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .card-title { display:flex; gap:12px; min-width:0; align-items:flex-start; }
 .card-title h3 { margin:0 0 5px; }
 .url-copy { border:0; padding:0; background:none; color:var(--muted); cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+.card-meta { display:flex; align-items:center; gap:6px; margin-top:8px; font-size:11px; color:var(--muted); }
+.card-meta .meta-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; opacity:.7; }
+.card-meta .meta-sep { opacity:.4; }
 .status.rate_limited, .model-state.rate_limited { color:#ad6800; background:#fff7e6; }
 .status.degraded, .model-state.degraded { color:#d46b08; background:#fff7e6; }
 .dot.rate_limited, .dot.degraded { background:#faad14; }

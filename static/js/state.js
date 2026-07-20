@@ -57,8 +57,8 @@ export function moveKey(keys, sourceId, targetId) {
   return next;
 }
 
-export function canReorder(status, query) {
-  return status === "all" && !String(query || "").trim();
+export function canReorder(status, query, sort = "default") {
+  return status === "all" && !String(query || "").trim() && (sort || "default") === "default";
 }
 
 export function keysFingerprint(keys) {

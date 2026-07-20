@@ -581,6 +581,36 @@ class DbTests(unittest.TestCase):
         self.assertGreaterEqual(stamp_b, before)
         self.assertLessEqual(stamp_b, after)
 
+    def test_sort_keys_by_created_at_desc_and_asc(self):
+        with db.connection(write=True) as conn:
+            conn.execute("DELETE FROM tbl_keys")
+            conn.executemany(
+                "INSERT INTO tbl_keys(name,base_url,api_key,sort_order,created_at) VALUES(?,?,?,?,?)",
+                [
+                    ("older", "https://older.example", "sk-older", 0, 1_700_000_000),
+                    ("mid",   "https://mid.example",   "sk-mid",   0, 1_800_000_000),
+                    ("newest","https://new.example",   "sk-new",   0, 1_900_000_000),
+                ],
+            )
+        desc = [row["name"] for row in db.list_keys(sort="created_desc")]
+        asc = [row["name"] for row in db.list_keys(sort="created_asc")]
+        self.assertEqual(desc, ["newest", "mid", "older"])
+        self.assertEqual(asc, ["older", "mid", "newest"])
+        page_desc = db.list_keys_page(limit=2, sort="created_desc")
+        self.assertEqual([row["name"] for row in page_desc["items"]], ["newest", "mid"])
+        self.assertTrue(page_desc["next_cursor"])
+        page_desc_next = db.list_keys_page(limit=2, cursor=page_desc["next_cursor"], sort="created_desc")
+        self.assertEqual([row["name"] for row in page_desc_next["items"]], ["older"])
+        self.assertFalse(page_desc_next["next_cursor"])
+        with self.assertRaisesRegex(ValueError, "invalid sort"):
+            db.list_keys_page(sort="nope")
+        with self.assertRaisesRegex(ValueError, "invalid page cursor"):
+            db.list_keys_page(cursor=page_desc["next_cursor"], sort="created_asc")
+        # A list-cursor from the legacy format must be rejected once the
+        # caller has switched to a non-default sort.
+        with self.assertRaisesRegex(ValueError, "invalid page cursor"):
+            db.list_keys_page(cursor="WzAsLTEsMV0", sort="created_desc")
+
     def test_legacy_private_setting_keys_migrate_to_camel_case(self):
         with db.connection(write=True) as conn:
             conn.executemany("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?)", [
