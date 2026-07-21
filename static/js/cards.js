@@ -13,33 +13,33 @@ export function accessAdvice(key) {
   const strictModelVerified = Number(key.model_verification_version || 0) >= 1;
   const adapter = key.model_probe_adapter || "";
   if (status === "auth_error") {
-    return { tone: "down", label: "鉴权失败", tag: "Key", title: "不可接入：Key 鉴权失败；请更新 API Key 后重新严格验证" };
+    return { tone: "down", label: "Key 鉴权失败", title: "不可接入：Key 鉴权失败；请更新 API Key 后重新严格验证" };
   }
   if (strictModelVerified && modelState === "auth_error") {
-    return { tone: "down", label: "鉴权失败", tag: "模型", title: "不可接入：模型鉴权失败；请确认模型权限后重新验证" };
+    return { tone: "down", label: "模型鉴权失败", title: "不可接入：模型鉴权失败；请确认模型权限后重新验证" };
   }
   if (status === "rate_limited" || (strictModelVerified && modelState === "rate_limited")) {
-    return { tone: "rate-limited", label: "限流", tag: "严格", title: "暂缓接入：严格验证限流；等待额度恢复后再用于 ccswitch" };
+    return { tone: "rate-limited", label: "限流 严格验证", title: "暂缓接入：严格验证限流；等待额度恢复后再用于 ccswitch" };
   }
   if (!key.check_model) {
-    return { tone: "unknown", label: "待配置", tag: "模型", title: "未确认：缺少验证模型；设置模型后执行严格验证" };
+    return { tone: "unknown", label: "待配置模型", title: "未确认：缺少验证模型；设置模型后执行严格验证" };
   }
   if (!strictModelVerified) {
-    return { tone: "unknown", label: "待验证", tag: "严格", title: "未确认：请先严格验证；有 API Key 不代表可直接调用" };
+    return { tone: "unknown", label: "待严格验证", title: "未确认：请先严格验证；有 API Key 不代表可直接调用" };
   }
   if (modelState !== "up") {
-    return { tone: modelState.replace(/_/g, "-"), label: "不建议", tag: statusLabel[modelState] || "异常", title: `不建议接入：${statusLabel[modelState] || "模型异常"}；先处理模型验证错误` };
+    return { tone: modelState.replace(/_/g, "-"), label: `不建议 ${statusLabel[modelState] || "异常"}`, title: `不建议接入：${statusLabel[modelState] || "模型异常"}；先处理模型验证错误` };
   }
   if (adapter === "openai_chat") {
-    return { tone: "up", label: "直连", tag: "Chat", title: "可直接接入 ccswitch：OpenAI chat/completions 可用" };
+    return { tone: "up", label: "直连 Chat", title: "可直接接入 ccswitch：OpenAI chat/completions 可用" };
   }
   if (adapter === "openai_responses") {
-    return { tone: "degraded", label: "需壳", tag: "Resp", title: "需 Responses 兼容壳：仅 /responses 严格验证通过" };
+    return { tone: "degraded", label: "需壳 Responses", title: "需 Responses 兼容壳：仅 /responses 严格验证通过" };
   }
   if (adapter === "anthropic_messages") {
-    return { tone: "degraded", label: "需壳", tag: "Msg", title: "需 Anthropic Messages 壳：按 Messages 协议适配后接入" };
+    return { tone: "degraded", label: "需壳 Messages", title: "需 Anthropic Messages 壳：按 Messages 协议适配后接入" };
   }
-  return { tone: "degraded", label: "待确认", tag: "壳", title: "可用但接入方式未识别；查看端点文档后配置适配壳" };
+  return { tone: "degraded", label: "待确认接入壳", title: "可用但接入方式未识别；查看端点文档后配置适配壳" };
 }
 
 /** Build HTML for a single key card. Pure string template (no DOM). */
@@ -71,7 +71,7 @@ export function renderCard(key, state) {
       <div class="metric primary-metric"><span>API Key</span><b class="key-mask-line"><span class="masked-key">${esc(key.api_key_masked || maskKey(key.api_key))}</span><button class="link-btn js-copy-key" type="button" title="复制完整 API Key">复制</button></b></div>
       <div class="metric"><span>在线协议</span><b class="protocol-statuses">${protocols.length ? protocols.map(([name, protocolStatus]) => `<em class="protocol-state ${protocolStatus.replace(/_/g, "-")}">${name} · ${statusLabel[protocolStatus] || "未知"}</em>`).join("") : "未确认"}</b></div>
       <div class="metric wide-metric"><span>严格验证</span><b class="model-state ${modelTone}">${esc(key.check_model || "未设置")} · ${modelLabel}</b></div>
-      <div class="metric access-metric compact-access" title="${esc(advice.title)}"><b class="access-state ${advice.tone}" title="${esc(advice.title)}"><em>${esc(advice.label)}</em><small>${esc(advice.tag)}</small></b></div>
+      <div class="metric access-metric compact-access" title="${esc(advice.title)}"><b class="access-state ${advice.tone}" title="${esc(advice.title)}"><em>${esc(advice.label)}</em></b></div>
     </div>
     <details class="card-details"><summary>模型、备注与错误详情</summary><div><p><b>模型：</b>${models.length ? models.slice(0, 8).map((model) => `<span class="chip">${esc(model)}</span>`).join(" ") : "暂无"} ${models.length > 8 ? `<button class="link-btn js-models">查看全部 ${models.length}</button>` : ""}</p>${key.check_model ? `<p><b>最近严格验证：</b>${strictModelVerified ? relativeTime(key.model_last_check_at) : "未完成"}</p>` : ""}${(key.model_probe_adapter && strictModelVerified && key.model_status === "up") ? `<p><b>验证壳：</b>${esc(adapterLabel[key.model_probe_adapter] || key.model_probe_adapter)}</p>` : ""}${key.notes ? `<p><b>备注：</b>${esc(key.notes)}</p>` : ""}${(key.last_error && key.status !== "up") ? `<p class="error-line"><b>错误：</b>${esc(key.last_error)}</p>` : ""}${(key.model_last_error && strictModelVerified && key.model_status !== "up") ? `<p class="error-line"><b>模型错误：</b>${esc(key.model_last_error)}</p>` : ""}</div></details>
     <footer class="card-actions"><label class="monitor-toggle"><input class="row-mon" type="checkbox" ${key.monitor_enabled ? "checked" : ""}>监测</label><button class="btn soft js-check" ${busy ? "disabled" : ""}>${busy ? "检测中…" : "检测"}</button><button class="btn ghost js-check-model">严格验证</button><button class="btn ghost js-edit">编辑</button><button class="btn ghost js-export">导出</button><button class="btn danger-soft js-del">删除</button></footer>
