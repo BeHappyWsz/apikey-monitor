@@ -327,7 +327,8 @@ def _migrate(conn):
                       ("next_check_at", "INTEGER DEFAULT 0"),
                       ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''"),
                       ("openai_status", "TEXT DEFAULT 'unknown'"), ("anthropic_status", "TEXT DEFAULT 'unknown'"),
-                      ("created_at", "INTEGER")):
+                      ("created_at", "INTEGER"),
+                      ("monitor_count", "INTEGER DEFAULT 0"), ("strict_count", "INTEGER DEFAULT 0")):
         if col not in cols:
             conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {col} {decl}")
     # Stamp legacy rows that predate the created_at column with the current
@@ -340,7 +341,7 @@ def _migrate(conn):
         conn.execute("ALTER TABLE tbl_settings ADD COLUMN name TEXT NOT NULL DEFAULT ''")
     _migrate_setting_keys(conn)
     _backfill_setting_names(conn)
-    conn.execute("PRAGMA user_version=14")
+    conn.execute("PRAGMA user_version=15")
     _to_row = conn.execute("SELECT v FROM tbl_settings WHERE k='requestTimeoutSec'").fetchone()
     if _to_row and str(_to_row["v"]) == "15":
         conn.execute("UPDATE tbl_settings SET v='45' WHERE k='requestTimeoutSec'")
@@ -441,7 +442,8 @@ def init_db():
             model_verification_version INTEGER DEFAULT 0,
             model_probe_adapter TEXT DEFAULT '',
             next_check_at INTEGER DEFAULT 0,
-            sort_order INTEGER DEFAULT 0, check_path TEXT DEFAULT ''
+            sort_order INTEGER DEFAULT 0, check_path TEXT DEFAULT '',
+            monitor_count INTEGER DEFAULT 0, strict_count INTEGER DEFAULT 0
         )""")
         conn.execute("CREATE TABLE IF NOT EXISTS tbl_settings (k TEXT PRIMARY KEY, v TEXT, name TEXT NOT NULL DEFAULT '')")
         conn.execute("""CREATE TABLE IF NOT EXISTS tbl_users (
@@ -464,7 +466,7 @@ def _init_mysql():
     with connection(write=True) as conn:
         _migrate_table_names_mysql(conn)
         statements = [
-            """CREATE TABLE IF NOT EXISTS tbl_keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,openai_status VARCHAR(32) DEFAULT 'unknown',anthropic_status VARCHAR(32) DEFAULT 'unknown',models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,model_verification_version TINYINT DEFAULT 0,model_probe_adapter VARCHAR(64) DEFAULT '',next_check_at BIGINT DEFAULT 0,sort_order BIGINT DEFAULT 0,check_path TEXT,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at),INDEX idx_keys_monitor_next (monitor_enabled,next_check_at,last_check_at,id)) CHARACTER SET utf8mb4""",
+            """CREATE TABLE IF NOT EXISTS tbl_keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,openai_status VARCHAR(32) DEFAULT 'unknown',anthropic_status VARCHAR(32) DEFAULT 'unknown',models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,model_verification_version TINYINT DEFAULT 0,model_probe_adapter VARCHAR(64) DEFAULT '',next_check_at BIGINT DEFAULT 0,sort_order BIGINT DEFAULT 0,check_path TEXT,monitor_count BIGINT DEFAULT 0,strict_count BIGINT DEFAULT 0,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at),INDEX idx_keys_monitor_next (monitor_enabled,next_check_at,last_check_at,id)) CHARACTER SET utf8mb4""",
             "CREATE TABLE IF NOT EXISTS tbl_settings (k VARCHAR(191) PRIMARY KEY,v LONGTEXT,name VARCHAR(255) NOT NULL DEFAULT '') CHARACTER SET utf8mb4",
             "CREATE TABLE IF NOT EXISTS tbl_users (id BIGINT PRIMARY KEY AUTO_INCREMENT,username VARCHAR(64) NOT NULL UNIQUE,password_hash TEXT NOT NULL,must_change_password TINYINT DEFAULT 0,enabled TINYINT NOT NULL DEFAULT 1,created_at BIGINT NOT NULL) CHARACTER SET utf8mb4",
             "CREATE TABLE IF NOT EXISTS tbl_sessions (token_hash CHAR(64) PRIMARY KEY,user_id BIGINT NOT NULL,csrf_token TEXT NOT NULL,created_at BIGINT NOT NULL,expires_at BIGINT NOT NULL,last_seen_at BIGINT NOT NULL,INDEX idx_sessions_expires_at(expires_at),FOREIGN KEY(user_id) REFERENCES tbl_users(id) ON DELETE CASCADE) CHARACTER SET utf8mb4",
@@ -482,10 +484,11 @@ def _init_mysql():
             "SELECT COLUMN_NAME FROM information_schema.columns "
             "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}
         for column in ("openai_status", "anthropic_status", "model_verification_version",
-                       "model_probe_adapter", "next_check_at", "created_at"):
+                       "model_probe_adapter", "next_check_at", "created_at",
+                       "monitor_count", "strict_count"):
             if column not in key_columns:
                 declaration = (
-                    "BIGINT DEFAULT 0" if column == "next_check_at"
+                    "BIGINT DEFAULT 0" if column in ("next_check_at", "monitor_count", "strict_count")
                     else ("TINYINT DEFAULT 0" if column == "model_verification_version"
                           else ("VARCHAR(32) DEFAULT 'unknown'" if column in ("openai_status", "anthropic_status")
                                 else ("VARCHAR(64) DEFAULT ''" if column == "model_probe_adapter" else "BIGINT")))
@@ -979,7 +982,7 @@ def delete_keys(ids):
 
 
 def update_status(key_id, status, latency_ms, error, supports_anthropic=None, supports_openai=None, models=None,
-                  openai_status=None, anthropic_status=None, next_check_at=None):
+                  openai_status=None, anthropic_status=None, next_check_at=None, bump_monitor_count=True):
     sets = ["status=?", "latency_ms=?", "last_error=?", "last_check_at=?"]
     values = [status, latency_ms, (error or "")[:300], int(time.time())]
     if supports_anthropic is not None:
@@ -994,6 +997,8 @@ def update_status(key_id, status, latency_ms, error, supports_anthropic=None, su
         sets.append("anthropic_status=?"); values.append(anthropic_status)
     if next_check_at is not None:
         sets.append("next_check_at=?"); values.append(int(next_check_at))
+    if bump_monitor_count:
+        sets.append("monitor_count=COALESCE(monitor_count, 0)+1")
     with connection(write=True) as conn:
         conn.execute(f"UPDATE tbl_keys SET {', '.join(sets)} WHERE id=?", (*values, key_id))
     touch_list_generation()
@@ -1002,7 +1007,8 @@ def update_status(key_id, status, latency_ms, error, supports_anthropic=None, su
 def update_model_status(key_id, status, latency_ms, error, verification_version=1, adapter=""):
     with connection(write=True) as conn:
         conn.execute("""UPDATE tbl_keys SET model_status=?, model_latency_ms=?, model_last_error=?,
-                      model_last_check_at=?, model_verification_version=?, model_probe_adapter=? WHERE id=?""",
+                      model_last_check_at=?, model_verification_version=?, model_probe_adapter=?,
+                      strict_count=COALESCE(strict_count, 0)+1 WHERE id=?""",
                      (status, latency_ms, (error or "")[:300], int(time.time()), verification_version,
                       (adapter or "")[:64], key_id))
     touch_list_generation()

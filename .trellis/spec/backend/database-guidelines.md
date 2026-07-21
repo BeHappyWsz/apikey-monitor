@@ -45,6 +45,7 @@ with db.connection(write=True) as conn:
 | `latency_ms`, `last_check_at`, `last_error` | last protocol/health probe |
 | `monitor_enabled`, `interval_sec`, `next_check_at` | per-key schedule (`interval_sec` nullable); indexed persisted next due time |
 | `check_model`, `model_status`, `model_latency_ms`, `model_last_check_at`, `model_last_error`, `model_probe_adapter` | optional strict model probe; adapter records the successful call shape (`openai_chat`, `openai_responses`, `anthropic_messages`) |
+| `monitor_count`, `strict_count` | integer counters (default 0); `update_status` bumps monitor, `update_model_status` bumps strict |
 | `sort_order` | drag-and-drop; new keys get lower-than-min order (top of list) |
 | `notes`, `created_at` | metadata |
 
@@ -87,7 +88,7 @@ No external tool. Evolution path:
 1. Run table-name migration before any target `CREATE TABLE IF NOT EXISTS`.
 2. Update `CREATE TABLE IF NOT EXISTS` for fresh installs.
 3. `_migrate(conn)`: `PRAGMA table_info` + conditional `ALTER TABLE ... ADD COLUMN`.
-4. Set `PRAGMA user_version` (currently **14** after migrate).
+4. Set `PRAGMA user_version` (currently **15** after migrate).
 
 When adding a column:
 

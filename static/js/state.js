@@ -68,6 +68,6 @@ export function keysFingerprint(keys) {
     key.model_verification_version, key.model_probe_adapter, key.monitor_enabled, key.name,
     key.base_url, key.check_model, key.notes, (key.models || []).join(","),
     key.supports_openai, key.supports_anthropic, key.openai_status, key.anthropic_status, key.sort_order,
-    key.api_key_masked || "", key.has_api_key ? 1 : 0,
+    key.api_key_masked || "", key.has_api_key ? 1 : 0, key.monitor_count || 0, key.strict_count || 0,
   ].join(":")).join("|");
 }

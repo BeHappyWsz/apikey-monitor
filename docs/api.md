@@ -52,6 +52,8 @@ GET /api/keys/revision
   "check_model": "gpt-4o-mini",
   "model_status": "up",
   "model_verification_version": 1,
+  "monitor_count": 12,
+  "strict_count": 3,
   "model_probe_adapter": "openai_chat"
 }
 ```

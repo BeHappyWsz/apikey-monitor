@@ -446,6 +446,23 @@ class DbTests(unittest.TestCase):
     def tearDown(self):
         db.DB_PATH, db.CONFIG_PATH = self.old_db, self.old_config
         self.temp.cleanup()
+
+    def test_check_counts_increment(self):
+        key_id = db.add_key({"base_url": "https://count.example", "api_key": "sk-count"})
+        row = db.get_key(key_id)
+        self.assertEqual(int(row.get("monitor_count") or 0), 0)
+        self.assertEqual(int(row.get("strict_count") or 0), 0)
+        db.update_status(key_id, "up", 10, "")
+        db.update_status(key_id, "up", 12, "")
+        db.update_model_status(key_id, "up", 8, "", adapter="openai_chat")
+        db.update_status(key_id, "rate_limited", 9, "limit", bump_monitor_count=False)
+        row = db.get_key(key_id)
+        self.assertEqual(int(row["monitor_count"]), 2)
+        self.assertEqual(int(row["strict_count"]), 1)
+        pub = db.public_key(row)
+        self.assertEqual(int(pub["monitor_count"]), 2)
+        self.assertEqual(int(pub["strict_count"]), 1)
+
     def test_endpoint_edit_resets_status(self):
         key_id = db.add_key({"base_url": "https://a.example", "api_key": "sk-old"})
         db.update_status(key_id, "up", 12, "", True, True, ["x"])
@@ -668,7 +685,8 @@ class DbTests(unittest.TestCase):
             self.assertTrue({"tbl_keys", "tbl_settings", "tbl_users", "tbl_sessions"} <= tables)
             self.assertFalse({"keys", "settings", "users", "sessions"} & tables)
             self.assertTrue({"openai_status", "anthropic_status", "model_verification_version",
-                             "model_probe_adapter", "next_check_at"} <= key_columns)
+                             "model_probe_adapter", "next_check_at",
+                             "monitor_count", "strict_count"} <= key_columns)
             self.assertEqual(db.get_key(7)["api_key"], "sk-legacy")
             self.assertEqual(db.get_key(7)["models"], ["model-a"])
             self.assertEqual(db.get_all_settings()["custom"], "preserved")
@@ -763,7 +781,7 @@ class DbTests(unittest.TestCase):
             finally:
                 db.DB_PATH = previous_path
         self.assertIn("created_at", columns)
-        self.assertEqual(version, 14)
+        self.assertEqual(version, 15)
         self.assertGreaterEqual(stamp_a, before)
         self.assertLessEqual(stamp_a, after)
         self.assertGreaterEqual(stamp_b, before)
