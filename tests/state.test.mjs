@@ -54,16 +54,20 @@ test("card distinguishes strict model verification from protocol availability",(
 });
 test("card shows direct ccswitch advice for chat adapter",()=>{
   const html=renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",check_model:"gpt-test",model_status:"up",model_verification_version:1,model_probe_adapter:"openai_chat"},cardState);
+  assert.match(html,/直连/);
+  assert.match(html,/Chat/);
   assert.match(html,/可直接接入 ccswitch/);
   assert.match(html,/OpenAI chat\/completions 可用/);
 });
 test("card shows wrapper advice for responses-only adapter",()=>{
   const html=renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",check_model:"gpt-test",model_status:"up",model_verification_version:1,model_probe_adapter:"openai_responses"},cardState);
+  assert.match(html,/需壳/);
+  assert.match(html,/Resp/);
   assert.match(html,/需 Responses 兼容壳/);
   assert.match(html,/仅 \/responses 严格验证通过/);
 });
 test("access advice treats strict model rate limit as not directly usable",()=>{
   assert.deepEqual(accessAdvice({status:"rate_limited",check_model:"gpt",model_status:"rate_limited",model_verification_version:1}),{
-    tone:"rate-limited",label:"暂缓接入：严格验证限流",detail:"等待额度恢复后再用于 ccswitch"
+    tone:"rate-limited",label:"限流",tag:"严格",title:"暂缓接入：严格验证限流；等待额度恢复后再用于 ccswitch"
   });
 });
