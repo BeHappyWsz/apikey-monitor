@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """SQLite and JSON configuration persistence."""
 import base64
+import hashlib
 import json
 import os
 import re
@@ -47,8 +48,11 @@ _cache_client = None
 _cache_signature = None
 _cache_retry_at = 0
 _CACHE_TTL_SECONDS = 60
+_REVISION_CACHE_TTL_SECONDS = 15
 _PUBLIC_KEY_CACHE_PREFIX = "apikey-monitor:public-key:"
+_PUBLIC_PAGE_CACHE_PREFIX = "apikey-monitor:public-page:"
 _PUBLIC_SETTINGS_CACHE_KEY = "apikey-monitor:public-settings"
+_LIST_REVISION_CACHE_KEY = "apikey-monitor:list-revision"
 _TABLE_RENAMES = (
     ("keys", "tbl_keys"),
     ("settings", "tbl_settings"),
@@ -148,11 +152,11 @@ def _cache_get(name):
         return None
 
 
-def _cache_set(name, value):
+def _cache_set(name, value, ttl=None):
     try:
         client = _cache()
         if client:
-            client.setex(name, _CACHE_TTL_SECONDS, json.dumps(value, ensure_ascii=False))
+            client.setex(name, int(ttl or _CACHE_TTL_SECONDS), json.dumps(value, ensure_ascii=False))
     except Exception:
         pass
 
@@ -162,10 +166,25 @@ def _invalidate_public_cache():
         client = _cache()
         if client:
             names = list(client.scan_iter(f"{_PUBLIC_KEY_CACHE_PREFIX}*"))
+            names.extend(client.scan_iter(f"{_PUBLIC_PAGE_CACHE_PREFIX}*"))
             names.append(_PUBLIC_SETTINGS_CACHE_KEY)
-            if names: client.delete(*names)
+            names.append(_LIST_REVISION_CACHE_KEY)
+            if names:
+                client.delete(*names)
     except Exception:
         pass
+
+
+def _cache_token(value):
+    raw = "" if value is None else str(value)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _public_page_cache_name(revision, sort, status_filter, search, limit, cursor):
+    return (
+        f"{_PUBLIC_PAGE_CACHE_PREFIX}{revision}:{sort}:{status_filter}:"
+        f"{_cache_token(search)}:{int(limit)}:{_cache_token(cursor)}"
+    )
 
 
 class _MyRow(dict):
@@ -230,6 +249,9 @@ def get_list_revision():
     Combines process-local generation with DB stamps so monitor status writes
     and CRUD both change the token without shipping the full key list.
     """
+    cached = _cache_get(_LIST_REVISION_CACHE_KEY)
+    if cached is not None:
+        return cached
     with connection() as conn:
         row = conn.execute(
             """
@@ -242,10 +264,12 @@ def get_list_revision():
             FROM tbl_keys
             """
         ).fetchone()
-    return (
+    revision = (
         f"{_list_generation}:{row['c']}:{row['max_lc']}:{row['max_mlc']}:"
         f"{row['max_id']}:{row['sum_sort']}:{row['mon']}"
     )
+    _cache_set(_LIST_REVISION_CACHE_KEY, revision, ttl=_REVISION_CACHE_TTL_SECONDS)
+    return revision
 
 
 def _load_defaults():
@@ -792,6 +816,14 @@ def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="de
     """Return one stable-order public page without shipping the entire key list."""
     sort = _normalize_sort(sort)
     limit = max(1, min(int(limit), 100))
+    status_filter = str(status_filter or "all")
+    search = "" if search is None else str(search)
+    cursor = "" if cursor is None else str(cursor)
+    revision = get_list_revision()
+    cache_name = _public_page_cache_name(revision, sort, status_filter, search, limit, cursor)
+    cached = _cache_get(cache_name)
+    if cached is not None:
+        return cached
     facet_conditions, facet_values = _page_conditions("all", search)
     base_conditions, base_values = _page_conditions(status_filter, search)
     cursor_parts = _page_cursor_decode(cursor, expected_sort=sort)
@@ -809,11 +841,11 @@ def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="de
             )
             values.extend([group, group, anchor, anchor, key_id])
         elif sort == "created_desc":
-            # Order is created_at DESC, id DESC — the next row is strictly
+            # Order is created_at DESC, id DESC - the next row is strictly
             # smaller created_at, or equal created_at with a smaller id.
             conditions.append("(created_at<? OR (created_at=? AND id<?))")
             values.extend([anchor, anchor, key_id])
-        else:  # created_asc — ASC, ASC
+        else:  # created_asc - ASC, ASC
             conditions.append("(created_at>? OR (created_at=? AND id>?))")
             values.extend([anchor, anchor, key_id])
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
@@ -837,10 +869,10 @@ def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="de
         else:
             next_cursor = _page_cursor_encode(sort, 0,
                                              int(last.get("created_at") or 0), int(last["id"]))
-    return {"items": [public_key(row) for row in items], "next_cursor": next_cursor,
-            "total": total,
-            "summary": summary, "revision": get_list_revision()}
-
+    result = {"items": [public_key(row) for row in items], "next_cursor": next_cursor,
+              "total": total, "summary": summary, "revision": revision}
+    _cache_set(cache_name, result)
+    return result
 
 def move_key_before(key_id, before_id=None):
     """Move one key before another without requiring the browser to own all ids."""

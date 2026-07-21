@@ -48,8 +48,10 @@ the old application version by restoring the pre-upgrade backup rather than
 trying to merge reverse-renamed tables.
 
 Redis is optional and is currently activated only with the MySQL primary
-store.  It is a read-through cache for masked API-key lists/details and public
-settings only.  Entries expire after 60 seconds and all committed key/settings
+store.  It is a read-through cache for masked API-key lists/details, revision-
+scoped public key pages (`/api/keys/page`), the list-revision token, and public
+settings only.  Page/list/detail/settings entries expire after 60 seconds; the
+list-revision token expires after 15 seconds.  All committed key/settings
 writes invalidate them.  Redis failure or restart simply falls back to MySQL;
 it does not block API requests.  API keys, password hashes, sessions, and
 private settings are never cached.

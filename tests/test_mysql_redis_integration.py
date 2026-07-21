@@ -56,8 +56,20 @@ class MySqlRedisIntegrationTests(unittest.TestCase):
         cache_key = f"{db._PUBLIC_KEY_CACHE_PREFIX}{self.key_id}"
         self.assertGreater(cache.ttl(cache_key), 0)
 
+        revision = db.get_list_revision()
+        self.assertEqual(db._cache_get(db._LIST_REVISION_CACHE_KEY), revision)
+        page = db.list_keys_page(limit=5, search=self.marker)
+        page_key = db._public_page_cache_name(
+            revision, "default", "all", self.marker, 5, ""
+        )
+        self.assertEqual(db._cache_get(page_key), page)
+        self.assertTrue(any(item["id"] == self.key_id for item in page["items"]))
+        self.assertEqual(db.list_keys_page(limit=5, search=self.marker), page)
+
         self.assertTrue(db.update_key(self.key_id, {"name": self.marker + "-updated"}))
         self.assertIsNone(cache.get(cache_key))
+        self.assertIsNone(cache.get(db._LIST_REVISION_CACHE_KEY))
+        self.assertIsNone(cache.get(page_key))
         self.assertEqual(db.get_key(self.key_id, public=True)["name"], self.marker + "-updated")
 
         self.user_id = db.create_user(self.marker, "$argon2id$test", must_change_password=True)
