@@ -48,7 +48,11 @@ GET /api/keys/revision
   "base_url": "https://api.example.com",
   "api_key_masked": "sk-xx••••••xxxx",
   "has_api_key": true,
-  "status": "up"
+  "status": "up",
+  "check_model": "gpt-4o-mini",
+  "model_status": "up",
+  "model_verification_version": 1,
+  "model_probe_adapter": "openai_chat"
 }
 ```
 
@@ -95,6 +99,11 @@ The response is always masked and has this shape:
 `q` only, so the panel can keep status counters accurate. A changed list
 revision only raises a refresh prompt while the user is browsing; pressing
 Refresh explicitly reloads the first page with the current filters.
+
+`model_probe_adapter` is non-secret metadata from strict model verification.
+Values are `openai_chat`, `openai_responses`, `anthropic_messages`, or empty
+when no usable adapter has been confirmed. The web panel uses it to show
+ccswitch access guidance; portable JSON export intentionally excludes it.
 
 ### 新增单条
 

@@ -61,6 +61,7 @@ def model_probe(base, api_key, model, timeout):
         "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
     }
     probe_result = _protocol_result("anthropic")
+    probe_result["model_probe_adapter"] = "anthropic_messages"
     for url in candidate_urls(base, "messages"):
         code, raw, ms, err = http_mod._request("POST", url, headers, body, timeout)
         _record_http(probe_result, code, raw, ms, err, validation_400=True)

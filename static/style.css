@@ -715,7 +715,7 @@ table.cand { min-width:650px; }
   color: var(--muted);
 }
 .card-body-grid {
-  grid-template-columns: minmax(170px, 1fr) minmax(130px, .7fr) minmax(220px, 1.15fr);
+  grid-template-columns: minmax(160px, 1fr) minmax(125px, .7fr) minmax(190px, 1fr) minmax(220px, 1.15fr);
   gap: 10px;
   padding: 12px 16px 10px 18px;
 }
@@ -768,6 +768,23 @@ table.cand { min-width:650px; }
 .model-state.degraded { color: #d46b08; }
 .model-state.down { color: var(--down); }
 .model-state.up { color: #168a4a; }
+.access-metric small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.access-state {
+  border-radius: 6px;
+  padding: 1px 0;
+}
+.access-state.up { color: #168a4a; }
+.access-state.rate-limited,
+.access-state.degraded { color: #d46b08; }
+.access-state.down { color: var(--down); }
+.access-state.unknown { color: var(--muted); }
 .card-details {
   margin: 0 16px 0 18px;
   padding: 10px 0 11px;

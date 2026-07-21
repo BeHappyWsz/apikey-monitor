@@ -24,6 +24,7 @@ def _extract_error_message(raw):
 def _protocol_result(name):
     return {
         "protocol": name,
+        "model_probe_adapter": "",
         "endpoint_exists": False,
         "authenticated": False,
         "status": "down",

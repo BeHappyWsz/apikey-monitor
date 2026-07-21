@@ -55,6 +55,9 @@ HTTP must not reimplement lease/check logic; call these services from `api/route
 - A 200 response must contain generated text. Accepted OpenAI-compatible shapes
   are chat `choices[].message.content`, responses `output_text`, and nested
   `output[].content[].text` / string content variants.
+- Successful strict model checks persist `model_probe_adapter` so the browser
+  can distinguish directly usable OpenAI chat endpoints from endpoints that
+  need a Responses or Anthropic Messages compatibility wrapper.
 - Keep adapter-specific parsing in `core.protocol_base` / `core.protocols.*`;
   `services/key_service.py` should only orchestrate lease, concurrency, and DB
   persistence.

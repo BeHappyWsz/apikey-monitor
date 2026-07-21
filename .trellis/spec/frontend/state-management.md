@@ -71,6 +71,9 @@ Do **not** store API keys in `localStorage` / `sessionStorage`.
 | `keysFingerprint(keys)` | Stable string of status-relevant fields for poll short-circuit |
 
 **Rules:** no DOM, no `fetch` inside `state.js`. New filter math ? add Node tests.
+Include strict-model access metadata such as `model_probe_adapter` in
+`keysFingerprint(keys)` because the card can change its ccswitch guidance
+without any status label changing.
 
 ### Filter semantics worth preserving
 

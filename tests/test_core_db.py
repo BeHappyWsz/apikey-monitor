@@ -117,6 +117,7 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["model_status"], "up")
         self.assertTrue(result["model_verified"])
         self.assertEqual(result["model_verification_version"], 1)
+        self.assertEqual(result["model_probe_adapter"], "openai_chat")
 
     def test_strict_openai_model_check_falls_back_to_responses(self):
         calls = []
@@ -135,6 +136,7 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(any("responses" in url for url, _ in calls))
         response_body = next(body for url, body in calls if "responses" in url)
         self.assertEqual(response_body["input"], "Reply with exactly: OK")
+        self.assertEqual(result["model_probe_adapter"], "openai_responses")
 
     def test_strict_openai_responses_accepts_nested_text(self):
         responses = [
@@ -146,6 +148,7 @@ class CoreTests(unittest.TestCase):
             result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
         self.assertEqual(result["model_status"], "up")
         self.assertTrue(result["model_verified"])
+        self.assertEqual(result["model_probe_adapter"], "openai_responses")
 
     def test_strict_openai_chat_rate_limit_does_not_fallback_to_responses(self):
         calls = []
@@ -174,6 +177,7 @@ class CoreTests(unittest.TestCase):
             result = core.model_check("https://example.com", "sk-test", "claude-test", supports_anthropic=True)
         self.assertEqual(result["model_status"], "up")
         self.assertTrue(result["model_verified"])
+        self.assertEqual(result["model_probe_adapter"], "anthropic_messages")
 
 
     def test_export_formats(self):
@@ -388,7 +392,7 @@ class DbTests(unittest.TestCase):
     def test_endpoint_edit_resets_status(self):
         key_id = db.add_key({"base_url": "https://a.example", "api_key": "sk-old"})
         db.update_status(key_id, "up", 12, "", True, True, ["x"])
-        db.update_model_status(key_id, "up", 5, "")
+        db.update_model_status(key_id, "up", 5, "", adapter="openai_chat")
         db.update_key(key_id, {"api_key": "sk-new"})
         row = db.get_key(key_id)
         self.assertEqual(row["status"], "unknown")
@@ -396,6 +400,7 @@ class DbTests(unittest.TestCase):
         self.assertIsNone(row["last_check_at"])
         self.assertEqual(row["model_status"], "unknown")
         self.assertEqual(row["model_verification_version"], 0)
+        self.assertEqual(row["model_probe_adapter"], "")
 
     def test_reorder_keys_persists_list_order(self):
         first = db.add_key({"base_url": "https://a.example", "api_key": "sk-a"})
@@ -456,6 +461,17 @@ class DbTests(unittest.TestCase):
         self.assertEqual(result["model_status"], "rate_limited")
         self.assertEqual(row["model_status"], "rate_limited")
         self.assertEqual(row["status"], "rate_limited")
+
+    def test_manual_strict_success_persists_probe_adapter(self):
+        from services.key_service import KEYS
+        key_id = db.add_key({"name": "chat", "base_url": "https://chat.example", "api_key": "sk-chat", "check_model": "gpt"})
+        db.update_status(key_id, "up", 1, "", supports_openai=True, supports_anthropic=False)
+        with patch("core.http._request", return_value=(200, '{"choices":[{"message":{"content":"OK"}}]}', 9, None)):
+            result = KEYS.check_model(key_id)
+        row = db.get_key(key_id, public=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertEqual(result["model_probe_adapter"], "openai_chat")
+        self.assertEqual(row["model_probe_adapter"], "openai_chat")
 
     def test_health_refresh_keeps_verified_model_rate_limit(self):
         from services.key_service import KEYS
@@ -594,7 +610,8 @@ class DbTests(unittest.TestCase):
                 key_columns = {row[1] for row in conn.execute("PRAGMA table_info(tbl_keys)")}
             self.assertTrue({"tbl_keys", "tbl_settings", "tbl_users", "tbl_sessions"} <= tables)
             self.assertFalse({"keys", "settings", "users", "sessions"} & tables)
-            self.assertTrue({"openai_status", "anthropic_status", "model_verification_version", "next_check_at"} <= key_columns)
+            self.assertTrue({"openai_status", "anthropic_status", "model_verification_version",
+                             "model_probe_adapter", "next_check_at"} <= key_columns)
             self.assertEqual(db.get_key(7)["api_key"], "sk-legacy")
             self.assertEqual(db.get_key(7)["models"], ["model-a"])
             self.assertEqual(db.get_all_settings()["custom"], "preserved")
@@ -689,7 +706,7 @@ class DbTests(unittest.TestCase):
             finally:
                 db.DB_PATH = previous_path
         self.assertIn("created_at", columns)
-        self.assertEqual(version, 13)
+        self.assertEqual(version, 14)
         self.assertGreaterEqual(stamp_a, before)
         self.assertLessEqual(stamp_a, after)
         self.assertGreaterEqual(stamp_b, before)

@@ -59,6 +59,7 @@ def model_probe(base, api_key, model, timeout):
         },
         timeout,
         "openai",
+        "openai_chat",
     )
     if chat["http_status"] not in (0, 404):
         return chat
@@ -73,12 +74,14 @@ def model_probe(base, api_key, model, timeout):
         },
         timeout,
         "openai_responses",
+        "openai_responses",
     )
     return responses if responses["status"] != "down" else chat
 
 
-def _model_probe_adapter(base, endpoint, headers, body, timeout, response_protocol):
+def _model_probe_adapter(base, endpoint, headers, body, timeout, response_protocol, adapter):
     probe_result = _protocol_result("openai")
+    probe_result["model_probe_adapter"] = adapter
     for url in candidate_urls(base, endpoint):
         code, raw, ms, err = http_mod._request("POST", url, headers, body, timeout)
         _record_http(probe_result, code, raw, ms, err, validation_400=True)

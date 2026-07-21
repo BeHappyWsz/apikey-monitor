@@ -15,6 +15,7 @@
 - 每条 Key 持久化入库时间（`created_at`，秒级 Unix 时间戳），前端卡片副标题同时显示绝对日期与相对时间（`X 分钟/小时/天前`）。已有数据库在迁移时给历史行补一个当前时间戳，避免 1970 占位
 - 列表新增 `sort` 维度：`default`（保持用户自定义顺序，兼容旧行为）、`created_desc` 与 `created_asc`（按入库时间倒序/升序）。切换排序时清空游标并从首页重新加载；非默认排序下禁用卡片拖拽（与服务端 `ORDER BY` 冲突）。`?sort=` 同时支持 `GET /api/keys` 与 `GET /api/keys/page`；游标与排序绑定，跨排序复用会被服务端拒绝为 `invalid page cursor`
 - 粘贴导入识别短词 name token（`[A-Za-z][A-Za-z0-9_-]{1,11}`，长度 2–12），落在 url/key span 之外时会作为候选 Key 的 `name` 字段
+- 严格验证成功后记录实际可用的模型调用壳（`openai_chat` / `openai_responses` / `anthropic_messages`），密钥面板据此显示 ccswitch 接入建议：可直接接入、需要 Responses/Anthropic 兼容壳，或因限流/鉴权失败暂缓接入
 
 ### Changed
 

@@ -1,5 +1,5 @@
 import test from "node:test";
-import { renderCard } from "../static/js/cards.js";
+import { accessAdvice, renderCard } from "../static/js/cards.js";
 import assert from "node:assert/strict";
 import { getVisibleKeys, selectCurrentResults, selectionSummary, taskProgress, restartCandidates, isLatestResponse, moveKey, canReorder, keysFingerprint } from "../static/js/state.js";
 const keys=[{id:1,status:"up",name:"Alpha",models:["gpt-4"]},{id:2,status:"down",name:"Beta",models:[]}];
@@ -25,6 +25,11 @@ test("fingerprint changes with model_last_error",()=>{
   const b=keysFingerprint([{id:1,status:"up",model_status:"up",model_last_error:"stale"}]);
   assert.notEqual(a,b);
 });
+test("fingerprint changes with model_probe_adapter",()=>{
+  const a=keysFingerprint([{id:1,status:"up",model_status:"up",model_probe_adapter:"openai_chat"}]);
+  const b=keysFingerprint([{id:1,status:"up",model_status:"up",model_probe_adapter:"openai_responses"}]);
+  assert.notEqual(a,b);
+});
 const problemKeys=[{id:1,status:"up",name:"U"},{id:2,status:"down",name:"D"},{id:3,status:"auth_error",name:"A"},{id:4,status:"unknown",name:"N"},{id:5,status:"rate_limited",name:"R"}];
 test("problem filtering",()=>assert.deepEqual(getVisibleKeys(problemKeys,"problem","").map(k=>k.id),[2,3,4,5]));
 
@@ -46,4 +51,19 @@ test("card distinguishes strict model verification from protocol availability",(
   assert.match(unverified,/未严格验证/);
   assert.match(verified,/严格验证/);
   assert.doesNotMatch(verified,/未严格验证/);
+});
+test("card shows direct ccswitch advice for chat adapter",()=>{
+  const html=renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",check_model:"gpt-test",model_status:"up",model_verification_version:1,model_probe_adapter:"openai_chat"},cardState);
+  assert.match(html,/可直接接入 ccswitch/);
+  assert.match(html,/OpenAI chat\/completions 可用/);
+});
+test("card shows wrapper advice for responses-only adapter",()=>{
+  const html=renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",check_model:"gpt-test",model_status:"up",model_verification_version:1,model_probe_adapter:"openai_responses"},cardState);
+  assert.match(html,/需 Responses 兼容壳/);
+  assert.match(html,/仅 \/responses 严格验证通过/);
+});
+test("access advice treats strict model rate limit as not directly usable",()=>{
+  assert.deepEqual(accessAdvice({status:"rate_limited",check_model:"gpt",model_status:"rate_limited",model_verification_version:1}),{
+    tone:"rate-limited",label:"暂缓接入：严格验证限流",detail:"等待额度恢复后再用于 ccswitch"
+  });
 });

@@ -41,7 +41,8 @@ class KeyService:
                          result.get("supports_anthropic"), result.get("supports_openai"), result.get("models"),
                          result.get("openai_status"), result.get("anthropic_status"), next_check_at)
         if result.get("model_status") and result["model_status"] != "unknown":
-            db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"), result.get("model_error"))
+            db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"),
+                                   result.get("model_error"), adapter=result.get("model_probe_adapter") or "")
 
     def _probe(self, entry, health):
         settings = self._settings()
@@ -114,7 +115,8 @@ class KeyService:
                 result = core.model_check(entry["base_url"], entry["api_key"], model,
                                           bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
                                           int(settings.get("requestTimeoutSec", 45)))
-            db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"), result.get("model_error"))
+            db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"),
+                                   result.get("model_error"), adapter=result.get("model_probe_adapter") or "")
             if result.get("model_status") == "rate_limited":
                 next_check_at = db.monitor_next_check_at(entry, "rate_limited", settings)
                 db.update_status(key_id, "rate_limited", result.get("model_latency_ms"), result.get("model_error"),
