@@ -119,6 +119,63 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["model_verification_version"], 1)
         self.assertEqual(result["model_probe_adapter"], "openai_chat")
 
+    def test_strict_openai_model_check_accepts_reasoning_only(self):
+        with patch("core.http._request", return_value=(200,
+                '{"choices":[{"message":{"content":"","reasoning":"thinking then OK"}}]}', 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertTrue(result["model_verified"])
+        self.assertEqual(result["model_probe_adapter"], "openai_chat")
+
+    def test_strict_openai_model_check_accepts_reasoning_content_only(self):
+        with patch("core.http._request", return_value=(200,
+                '{"choices":[{"message":{"content":null,"reasoning_content":"step-by-step"}}]}', 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertTrue(result["model_verified"])
+
+    def test_strict_openai_model_probe_uses_raised_token_budget(self):
+        from core.protocol_base import MODEL_PROBE_MAX_TOKENS
+        bodies = []
+
+        def fake_request(method, url, headers, body, timeout):
+            bodies.append(body)
+            return 200, '{"choices":[{"message":{"content":"OK"}}]}', 5, None
+
+        with patch("core.http._request", side_effect=fake_request):
+            core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertTrue(bodies)
+        self.assertEqual(bodies[0]["max_tokens"], MODEL_PROBE_MAX_TOKENS)
+        self.assertGreaterEqual(MODEL_PROBE_MAX_TOKENS, 16)
+
+    def test_strict_openai_responses_uses_raised_output_token_budget(self):
+        from core.protocol_base import MODEL_PROBE_MAX_TOKENS
+        bodies = []
+
+        def fake_request(method, url, headers, body, timeout):
+            bodies.append((url, body))
+            if "chat/completions" in url:
+                return 404, "", 2, "HTTP 404"
+            return 200, '{"output_text":"OK"}', 9, None
+
+        with patch("core.http._request", side_effect=fake_request):
+            core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        response_body = next(body for url, body in bodies if "responses" in url)
+        self.assertEqual(response_body["max_output_tokens"], MODEL_PROBE_MAX_TOKENS)
+
+    def test_strict_anthropic_model_probe_uses_raised_token_budget(self):
+        from core.protocol_base import MODEL_PROBE_MAX_TOKENS
+        bodies = []
+
+        def fake_request(method, url, headers, body, timeout):
+            bodies.append(body)
+            return 200, '{"content":[{"type":"text","text":"OK"}]}', 5, None
+
+        with patch("core.http._request", side_effect=fake_request):
+            core.model_check("https://example.com", "sk-test", "claude-test", supports_anthropic=True)
+        self.assertTrue(bodies)
+        self.assertEqual(bodies[0]["max_tokens"], MODEL_PROBE_MAX_TOKENS)
+
     def test_strict_openai_model_check_falls_back_to_responses(self):
         calls = []
 

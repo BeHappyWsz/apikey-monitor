@@ -5,7 +5,7 @@ import json
 from version import USER_AGENT
 
 from core import http as http_mod
-from core.protocol_base import _protocol_result, _record_http, model_response_error
+from core.protocol_base import MODEL_PROBE_MAX_TOKENS, _protocol_result, _record_http, model_response_error
 from core.urls import candidate_urls, probe_urls
 
 
@@ -54,7 +54,7 @@ def model_probe(base, api_key, model, timeout):
         {
             "model": model,
             "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
-            "max_tokens": 3,
+            "max_tokens": MODEL_PROBE_MAX_TOKENS,
             "stream": False,
         },
         timeout,
@@ -70,7 +70,7 @@ def model_probe(base, api_key, model, timeout):
         {
             "model": model,
             "input": "Reply with exactly: OK",
-            "max_output_tokens": 3,
+            "max_output_tokens": MODEL_PROBE_MAX_TOKENS,
         },
         timeout,
         "openai_responses",

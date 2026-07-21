@@ -2,6 +2,11 @@
 """Shared protocol probe result shaping."""
 import json
 
+# Strict model-verification budget. Reasoning models often spend tokens on
+# thinking before any visible content; keep modest for cost but above a few
+# completion tokens (previous value of 3 caused false negatives).
+MODEL_PROBE_MAX_TOKENS = 32
+
 _AUTH_WORDS = ("auth", "api key", "api_key", "unauthorized", "forbidden", "credential", "token")
 
 
@@ -78,8 +83,7 @@ def model_response_error(protocol, raw):
         if isinstance(choices, list):
             for choice in choices:
                 message = choice.get("message") if isinstance(choice, dict) else None
-                content = message.get("content") if isinstance(message, dict) else None
-                if isinstance(content, str) and content.strip():
+                if _openai_message_has_text(message):
                     return ""
         return "invalid OpenAI completion response"
     if protocol == "openai_responses":
@@ -103,6 +107,23 @@ def model_response_error(protocol, raw):
                     return ""
         return "invalid Anthropic message response"
     return "unsupported strict model verification protocol"
+
+
+def _openai_message_has_text(message):
+    """True when chat message has usable content or reasoning-only text."""
+    if not isinstance(message, dict):
+        return False
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return True
+    # Some gateways return multimodal content parts instead of a plain string.
+    if isinstance(content, list) and _has_response_text(content):
+        return True
+    for key in ("reasoning", "reasoning_content"):
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            return True
+    return False
 
 
 def _has_response_text(value):
