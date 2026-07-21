@@ -47,18 +47,43 @@ def model_probe(base, api_key, model, timeout):
         "Content-Type": "application/json",
         "User-Agent": USER_AGENT,
     }
-    body = {
-        "model": model,
-        "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
-        "max_tokens": 3,
-        "stream": False,
-    }
+    chat = _model_probe_adapter(
+        base,
+        "chat/completions",
+        headers,
+        {
+            "model": model,
+            "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+            "max_tokens": 3,
+            "stream": False,
+        },
+        timeout,
+        "openai",
+    )
+    if chat["http_status"] not in (0, 404):
+        return chat
+    responses = _model_probe_adapter(
+        base,
+        "responses",
+        headers,
+        {
+            "model": model,
+            "input": "Reply with exactly: OK",
+            "max_output_tokens": 3,
+        },
+        timeout,
+        "openai_responses",
+    )
+    return responses if responses["status"] != "down" else chat
+
+
+def _model_probe_adapter(base, endpoint, headers, body, timeout, response_protocol):
     probe_result = _protocol_result("openai")
-    for url in candidate_urls(base, "chat/completions"):
+    for url in candidate_urls(base, endpoint):
         code, raw, ms, err = http_mod._request("POST", url, headers, body, timeout)
         _record_http(probe_result, code, raw, ms, err, validation_400=True)
         if code == 200:
-            validation_error = model_response_error("openai", raw)
+            validation_error = model_response_error(response_protocol, raw)
             if validation_error:
                 probe_result.update(status="degraded", error=validation_error)
         if code not in (0, 404):

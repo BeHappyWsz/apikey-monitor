@@ -18,6 +18,7 @@
 
 ### Changed
 
+- 严格模型验证增强 OpenAI-compatible 调用适配：`/chat/completions` 不可用时会回退尝试 `/responses`，并识别 `output_text` 与嵌套 `output[].content[].text` 文本响应；401/403 与 429 仍作为终止状态，不被 fallback 掩盖
 - 粘贴导入配对由"相邻 token 成对"改为"段内就近配对"：每个 `key` 取前后最近的 URL，距离相等时优先取前方 URL。同一段多个 key 共享同一 URL、以及交错成对均能正确解出；经典 `OPENAI_BASE_URL=… / OPENAI_API_KEY=…` env 形态仍然有效
 - 密钥卡片头部重排：入库时间从状态面板下移到标题下方的副标题位置，状态面板恢复 `状态 / 延迟 / 最近检测` 三项，移动端无须换行
 

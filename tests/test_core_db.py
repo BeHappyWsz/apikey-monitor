@@ -118,6 +118,49 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(result["model_verified"])
         self.assertEqual(result["model_verification_version"], 1)
 
+    def test_strict_openai_model_check_falls_back_to_responses(self):
+        calls = []
+
+        def fake_request(method, url, headers, body, timeout):
+            calls.append((url, body))
+            if "chat/completions" in url:
+                return 404, "", 2, "HTTP 404"
+            return 200, '{"output_text":"OK"}', 9, None
+
+        with patch("core.http._request", side_effect=fake_request):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertTrue(result["model_verified"])
+        self.assertTrue(any("chat/completions" in url for url, _ in calls))
+        self.assertTrue(any("responses" in url for url, _ in calls))
+        response_body = next(body for url, body in calls if "responses" in url)
+        self.assertEqual(response_body["input"], "Reply with exactly: OK")
+
+    def test_strict_openai_responses_accepts_nested_text(self):
+        responses = [
+            (404, "", 1, "HTTP 404"),
+            (404, "", 1, "HTTP 404"),
+            (200, '{"output":[{"content":[{"type":"output_text","text":"OK"}]}]}', 8, None),
+        ]
+        with patch("core.http._request", side_effect=responses):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertTrue(result["model_verified"])
+
+    def test_strict_openai_chat_rate_limit_does_not_fallback_to_responses(self):
+        calls = []
+
+        def fake_request(method, url, headers, body, timeout):
+            calls.append(url)
+            return 429, '{"error":{"message":"slow down"}}', 4, "HTTP 429"
+
+        with patch("core.http._request", side_effect=fake_request):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "rate_limited")
+        self.assertFalse(result["model_verified"])
+        self.assertEqual(len(calls), 1)
+        self.assertIn("chat/completions", calls[0])
+
     def test_strict_openai_model_check_rejects_empty_or_proxy_response(self):
         with patch("core.http._request", return_value=(200, "{}", 7, None)):
             result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)

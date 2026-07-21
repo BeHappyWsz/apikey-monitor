@@ -81,6 +81,18 @@ def model_response_error(protocol, raw):
                 if isinstance(content, str) and content.strip():
                     return ""
         return "invalid OpenAI completion response"
+    if protocol == "openai_responses":
+        if isinstance(payload, dict):
+            output_text = payload.get("output_text")
+            if isinstance(output_text, str) and output_text.strip():
+                return ""
+            output = payload.get("output")
+            if isinstance(output, list):
+                for item in output:
+                    content = item.get("content") if isinstance(item, dict) else None
+                    if _has_response_text(content):
+                        return ""
+        return "invalid OpenAI responses response"
     if protocol == "anthropic":
         blocks = payload.get("content") if isinstance(payload, dict) else None
         if isinstance(blocks, list):
@@ -90,3 +102,15 @@ def model_response_error(protocol, raw):
                     return ""
         return "invalid Anthropic message response"
     return "unsupported strict model verification protocol"
+
+
+def _has_response_text(value):
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, dict):
+        for key in ("text", "content"):
+            if _has_response_text(value.get(key)):
+                return True
+    if isinstance(value, list):
+        return any(_has_response_text(item) for item in value)
+    return False

@@ -44,6 +44,21 @@ HTTP must not reimplement lease/check logic; call these services from `api/route
 - Changing `base_url` or `api_key` in `db.update_key` **resets** status/protocol/model fields to unknown/empty (see `db.py`).
 - Partial update: empty `api_key` is stripped in validator so the secret is kept.
 
+### Strict model verification adapters
+
+- OpenAI-compatible strict model checks try `/chat/completions` first and only
+  fall back to `/responses` when chat is route-missing or unreachable
+  (`404` / transport status `0`).
+- `401` / `403` and `429` are terminal for the first adapter that returns them;
+  do not hide invalid credentials or provider rate limits by trying another
+  endpoint.
+- A 200 response must contain generated text. Accepted OpenAI-compatible shapes
+  are chat `choices[].message.content`, responses `output_text`, and nested
+  `output[].content[].text` / string content variants.
+- Keep adapter-specific parsing in `core.protocol_base` / `core.protocols.*`;
+  `services/key_service.py` should only orchestrate lease, concurrency, and DB
+  persistence.
+
 ### Settings flag caveat
 
 `autoClassifyOnAdd` is stored in settings / docs but **is not read by KeyService today**. Post-add detection is controlled by request field **`check_after_save`** (see `static/js/add.js`). If you wire the setting, do it deliberately in service/UI and add tests ? do not assume it already works.
