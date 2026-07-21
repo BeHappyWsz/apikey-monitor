@@ -50,7 +50,7 @@ export function createListUi({ state, load, loadMore }) {
       const el = $("#" + id);
       if (el) el.textContent = counts[key];
     }
-    $$(".seg").forEach((button) => button.classList.toggle("active", button.dataset.status === state.status));
+    $$("#status-filter .seg").forEach((button) => button.classList.toggle("active", button.dataset.status === state.status));
   }
 
   function setBtnDisabled(el, disabled, titleWhenDisabled) {

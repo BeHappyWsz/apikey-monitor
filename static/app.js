@@ -10,7 +10,7 @@ import { initSync } from "./js/sync.js";
 import { createListUi } from "./js/list_ui.js";
 import { initExportUi } from "./js/export_ui.js";
 import { initListActions } from "./js/list_actions.js";
-import { $, toast } from "./js/utils.js";
+import { $, $$, toast } from "./js/utils.js";
 import { initAuth } from "./js/auth.js";
 import { LoadingBar, BusyOverlay } from "./js/feedback.js";
 
