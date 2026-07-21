@@ -787,6 +787,12 @@ table.cand { min-width:650px; }
   text-overflow: clip;
   white-space: nowrap;
 }
+.compact-access {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding-block: 8px;
+}
 .access-state em {
   flex: 0 1 auto;
   min-width: 0;
