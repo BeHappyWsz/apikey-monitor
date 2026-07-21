@@ -14,6 +14,7 @@ test("reorder only all unfiltered",()=>assert.equal(canReorder("all",""),true));
 test("reorder disabled while filtered",()=>assert.equal(canReorder("up",""),false));
 const issueKeys=[{id:1,status:"rate_limited",name:"R"},{id:2,status:"degraded",name:"D"},{id:3,status:"up",name:"U"}];
 test("issue filtering",()=>assert.deepEqual(getVisibleKeys(issueKeys,"issue","").map(k=>k.id),[1,2]));
+test("rate limit filtering uses overall status",()=>assert.deepEqual(getVisibleKeys(issueKeys,"rate_limited","").map(k=>k.id),[1]));
 test("fingerprint changes with status",()=>{
   const a=keysFingerprint([{id:1,status:"up",latency_ms:1}]);
   const b=keysFingerprint([{id:1,status:"down",latency_ms:1}]);

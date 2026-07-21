@@ -102,6 +102,14 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["status"], "up")
         self.assertEqual(result["model_status"], "auth_error")
 
+    def test_strict_model_rate_limit_replaces_protocol_status(self):
+        responses = [(200, '{"data":[]}', 1, None), (404, "", 1, "HTTP 404"), (404, "", 1, "HTTP 404")]
+        with patch("core.http._request", side_effect=responses), patch("core.probe.model_check", return_value={
+            "model_status": "rate_limited", "model_latency_ms": 9, "model_error": "model limited"}):
+            result = core.classify("https://example.com", "sk-test", check_model="gpt-test")
+        self.assertEqual(result["status"], "rate_limited")
+        self.assertEqual(result["model_status"], "rate_limited")
+
     def test_strict_openai_model_check_requires_generated_text(self):
         with patch("core.http._request", return_value=(200,
                 '{"choices":[{"message":{"content":"OK"}}]}', 7, None)):
@@ -375,11 +383,14 @@ class DbTests(unittest.TestCase):
                for index in range(4)]
         for index, key_id in enumerate(ids):
             db.update_status(key_id, "up" if index % 2 == 0 else "down", index + 1, "")
+        db.update_model_status(ids[1], "rate_limited", 9, "model limit")
+        db.update_status(ids[1], "rate_limited", 9, "model limit")
         first = db.list_keys_page(limit=2)
         self.assertEqual(len(first["items"]), 2)
         self.assertTrue(first["next_cursor"])
         self.assertEqual(first["total"], 4)
         self.assertEqual(first["summary"]["up"], 2)
+        self.assertEqual(first["summary"]["rate_limited"], 1)
         self.assertNotIn("api_key", first["items"][0])
         second = db.list_keys_page(limit=2, cursor=first["next_cursor"])
         self.assertEqual(len(second["items"]), 2)
@@ -388,6 +399,20 @@ class DbTests(unittest.TestCase):
         filtered = db.list_keys_page(limit=10, status_filter="up", search="key")
         self.assertEqual(filtered["total"], 2)
         self.assertEqual(len(filtered["items"]), 2)
+        rate_limited = db.list_keys_page(limit=10, status_filter="rate_limited", search="key")
+        self.assertEqual(rate_limited["total"], 1)
+        self.assertEqual([row["id"] for row in rate_limited["items"]], [ids[1]])
+
+    def test_manual_strict_rate_limit_updates_overall_status(self):
+        from services.key_service import KEYS
+        key_id = db.add_key({"name": "limited", "base_url": "https://limited.example", "api_key": "sk-limited", "check_model": "gpt"})
+        db.update_status(key_id, "up", 1, "", supports_openai=True, supports_anthropic=False)
+        with patch("core.http._request", return_value=(429, '{"error":{"message":"slow down"}}', 9, "HTTP 429")):
+            result = KEYS.check_model(key_id)
+        row = db.get_key(key_id)
+        self.assertEqual(result["model_status"], "rate_limited")
+        self.assertEqual(row["model_status"], "rate_limited")
+        self.assertEqual(row["status"], "rate_limited")
 
     def test_cursor_page_rejects_invalid_cursor_and_filter(self):
         db.add_key({"base_url": "https://a.example", "api_key": "sk-a"})

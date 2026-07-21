@@ -5,14 +5,17 @@ import { $, $$, esc } from "./utils.js";
 export function createListUi({ state, load, loadMore }) {
   let pageObserver = null;
   function countStatuses() {
-    if (state.summary && Object.keys(state.summary).length) return state.summary;
-    const counts = { all: state.keys.length, up: 0, down: 0, auth_error: 0, issue: 0, problem: 0, unknown: 0 };
+    if (state.summary && Object.keys(state.summary).length) {
+      return { all: 0, up: 0, down: 0, auth_error: 0, rate_limited: 0, issue: 0, problem: 0, unknown: 0, ...state.summary };
+    }
+    const counts = { all: state.keys.length, up: 0, down: 0, auth_error: 0, rate_limited: 0, issue: 0, problem: 0, unknown: 0 };
     state.keys.forEach((key) => {
       const status = key.status || "unknown";
       if (status === "up") counts.up++;
       else if (status === "down") { counts.down++; counts.problem++; }
       else if (status === "auth_error") { counts.auth_error++; counts.problem++; }
-      else if (status === "rate_limited" || status === "degraded") { counts.issue++; counts.problem++; }
+      else if (status === "rate_limited") { counts.rate_limited++; counts.issue++; counts.problem++; }
+      else if (status === "degraded") { counts.issue++; counts.problem++; }
       else { counts.unknown++; counts.problem++; }
     });
     return counts;
@@ -45,7 +48,7 @@ export function createListUi({ state, load, loadMore }) {
     const counts = countStatuses();
     for (const [key, id] of Object.entries({
       all: "cnt-all", up: "cnt-up", down: "cnt-down", auth_error: "cnt-auth",
-      issue: "cnt-issue", problem: "cnt-problem", unknown: "cnt-unknown",
+      rate_limited: "cnt-rate-limited", issue: "cnt-issue", problem: "cnt-problem", unknown: "cnt-unknown",
     })) {
       const el = $("#" + id);
       if (el) el.textContent = counts[key];

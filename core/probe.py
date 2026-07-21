@@ -98,6 +98,15 @@ def _result_from_protocols(protocols):
     }
 
 
+def _apply_model_status_to_result(result, check):
+    result.update(check)
+    if check.get("model_status") == "rate_limited":
+        result["status"] = "rate_limited"
+        result["latency_ms"] = check.get("model_latency_ms")
+        result["error"] = check.get("model_error") or result.get("error")
+    return result
+
+
 def classify(base_url, api_key, timeout=15, check_model="", check_path=""):
     try:
         base = normalize_base_url(base_url)
@@ -118,7 +127,7 @@ def classify(base_url, api_key, timeout=15, check_model="", check_path=""):
             result["supports_anthropic"],
             timeout,
         )
-        result.update(check)
+        _apply_model_status_to_result(result, check)
     return result
 
 

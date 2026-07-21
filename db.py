@@ -678,7 +678,7 @@ def list_keys(public=False, sort="default"):
 
 _PAGE_STATUSES = {
     "all": (), "up": ("up",), "down": ("down",), "auth_error": ("auth_error",),
-    "unknown": ("unknown",), "issue": ("rate_limited", "degraded"),
+    "rate_limited": ("rate_limited",), "unknown": ("unknown",), "issue": ("rate_limited", "degraded"),
     "problem": ("down", "auth_error", "rate_limited", "degraded", "unknown"),
 }
 
@@ -774,6 +774,7 @@ def _page_summary(conn, conditions, values):
         "up": counts.get("up", 0),
         "down": counts.get("down", 0),
         "auth_error": counts.get("auth_error", 0),
+        "rate_limited": counts.get("rate_limited", 0),
         "unknown": counts.get("unknown", 0),
         "issue": counts.get("rate_limited", 0) + counts.get("degraded", 0),
         "problem": total - counts.get("up", 0),

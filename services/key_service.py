@@ -102,6 +102,10 @@ class KeyService:
                                           bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
                                           int(settings.get("requestTimeoutSec", 45)))
             db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"), result.get("model_error"))
+            if result.get("model_status") == "rate_limited":
+                next_check_at = db.monitor_next_check_at(entry, "rate_limited", settings)
+                db.update_status(key_id, "rate_limited", result.get("model_latency_ms"), result.get("model_error"),
+                                 next_check_at=next_check_at)
             if model != entry.get("check_model"):
                 db.update_key(key_id, {"check_model": model})
             return result
