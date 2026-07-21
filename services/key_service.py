@@ -23,6 +23,19 @@ class KeyService:
 
     def _save_result(self, entry, result, settings):
         key_id = entry["id"]
+        verified_model_limit = (
+            result.get("status") == "up"
+            and result.get("model_status") in (None, "unknown")
+            and entry.get("model_status") == "rate_limited"
+            and int(entry.get("model_verification_version") or 0) >= 1
+        )
+        if verified_model_limit:
+            result = {
+                **result,
+                "status": "rate_limited",
+                "latency_ms": entry.get("model_latency_ms"),
+                "error": entry.get("model_last_error") or result.get("error"),
+            }
         next_check_at = db.monitor_next_check_at(entry, result["status"], settings)
         db.update_status(key_id, result["status"], result.get("latency_ms"), result.get("error"),
                          result.get("supports_anthropic"), result.get("supports_openai"), result.get("models"),

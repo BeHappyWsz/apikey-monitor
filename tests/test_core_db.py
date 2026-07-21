@@ -414,6 +414,25 @@ class DbTests(unittest.TestCase):
         self.assertEqual(row["model_status"], "rate_limited")
         self.assertEqual(row["status"], "rate_limited")
 
+    def test_health_refresh_keeps_verified_model_rate_limit(self):
+        from services.key_service import KEYS
+        key_id = db.add_key({"name": "limited", "base_url": "https://limited.example", "api_key": "sk-limited", "check_model": "gpt"})
+        db.update_status(key_id, "rate_limited", 9, "model limited", supports_openai=True, supports_anthropic=False)
+        db.update_model_status(key_id, "rate_limited", 9, "model limited")
+
+        def fake_request(method, url, headers, body, timeout):
+            if "models" in url:
+                return 200, '{"data":[]}', 1, None
+            if "messages" in url:
+                return 200, '{"content":[{"type":"text","text":"OK"}]}', 1, None
+            return 200, "{}", 1, None
+
+        with patch("core.http._request", side_effect=fake_request):
+            KEYS._probe(db.get_key(key_id), health=True)
+        row = db.get_key(key_id)
+        self.assertEqual(row["status"], "rate_limited")
+        self.assertEqual(row["model_status"], "rate_limited")
+
     def test_cursor_page_rejects_invalid_cursor_and_filter(self):
         db.add_key({"base_url": "https://a.example", "api_key": "sk-a"})
         with self.assertRaisesRegex(ValueError, "invalid page cursor"):
