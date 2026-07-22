@@ -42,6 +42,12 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
   function currentMonitorEnabled() {
     return $("#set-enabled-on").classList.contains("active") ? "1" : "0";
   }
+  function setStrictEnabled(value) {
+    const on = String(value) === "1";
+    $("#set-strict-on").classList.toggle("active", on);
+    $("#set-strict-off").classList.toggle("active", !on);
+  }
+  function currentStrictEnabled() { return $("#set-strict-on").classList.contains("active") ? "1" : "0"; }
 
   $("#btn-monitor-settings").addEventListener("click", () => withBusyButton($("#btn-monitor-settings"), async () => {
     try {
@@ -52,6 +58,8 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
       $("#set-conc").value = settings.concurrency;
       $("#set-timeout").value = settings.requestTimeoutSec;
       $("#set-ui-refresh").value = settings.uiRefreshIntervalSec ?? 15;
+      setStrictEnabled(settings.strictMonitorEnabled);
+      $("#set-strict-interval").value = settings.strictIntervalSec ?? 21600;
       openModal("modal-monitor-settings");
     } catch {
       // api() has already shown the actionable server error.
@@ -60,6 +68,8 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
 
   $("#set-enabled-on").addEventListener("click", () => { setMonitorEnabled("1"); autoSaveMonitor(true); });
   $("#set-enabled-off").addEventListener("click", () => { setMonitorEnabled("0"); autoSaveMonitor(true); });
+  $("#set-strict-on").addEventListener("click", () => { setStrictEnabled("1"); autoSaveMonitor(true); });
+  $("#set-strict-off").addEventListener("click", () => { setStrictEnabled("0"); autoSaveMonitor(true); });
 
   // Auto-save on field change. Numeric inputs debounce 600ms so a
   // burst of keystrokes only triggers one save; the toggle is
@@ -75,6 +85,8 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
       concurrency: $("#set-conc").value,
       requestTimeoutSec: $("#set-timeout").value,
       uiRefreshIntervalSec: $("#set-ui-refresh").value,
+      strictMonitorEnabled: currentStrictEnabled(),
+      strictIntervalSec: $("#set-strict-interval").value,
     };
   }
   function setMonitorStatus(text, kind = "info") {
@@ -104,7 +116,7 @@ export function initSettings({ api, state, openModal, closeModal, waitForHealth,
     if (immediate) await run();
     else monitorSaveTimer = setTimeout(run, 600);
   }
-  ["#set-interval", "#set-down", "#set-conc", "#set-timeout", "#set-ui-refresh"].forEach((sel) => {
+  ["#set-interval", "#set-down", "#set-conc", "#set-timeout", "#set-ui-refresh", "#set-strict-interval"].forEach((sel) => {
     $(sel)?.addEventListener("input", () => autoSaveMonitor());
     $(sel)?.addEventListener("change", () => autoSaveMonitor(true));
   });

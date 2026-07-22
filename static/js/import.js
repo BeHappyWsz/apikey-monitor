@@ -47,6 +47,7 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
       api_key: item.api_key || "",
       check_model: item.check_model || "",
       notes: item.notes || "",
+      tags: item.tags || "",
       show_key: false,
     }));
     state.candidateSelected = new Set(state.candidates.map((_, index) => index));
@@ -62,6 +63,7 @@ export function initImport({ api, state, load, openModal, closeModal, startTask 
         api_key: (candidate.api_key || "").trim(),
         check_model: (candidate.check_model || "").trim(),
         notes: (candidate.notes || "").trim(),
+        tags: (candidate.tags || "").trim(),
       };
     }).filter((item) => item.base_url && item.api_key);
     if (!items.length) return toast("没有选中的有效候选");

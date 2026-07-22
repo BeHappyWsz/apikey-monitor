@@ -20,6 +20,7 @@ _FALLBACK_DEFAULTS = {
     "downRecheckIntervalSec": "120", "concurrency": "8",
     "requestTimeoutSec": "45", "autoClassifyOnAdd": "1",
     "uiRefreshIntervalSec": "15",
+    "strictMonitorEnabled": "0", "strictIntervalSec": "21600",
 }
 _SETTING_NAMES = {
     "serverHost": "服务监听地址",
@@ -31,6 +32,8 @@ _SETTING_NAMES = {
     "requestTimeoutSec": "探测请求超时（秒）",
     "autoClassifyOnAdd": "新增 Key 自动识别开关",
     "uiRefreshIntervalSec": "前端列表刷新间隔（秒）",
+    "strictMonitorEnabled": "定时严格验证开关",
+    "strictIntervalSec": "严格验证间隔（秒）",
     "webdavServer": "WebDAV 服务器地址",
     "webdavUsername": "WebDAV 用户名",
     "webdavRemotePath": "WebDAV 远程备份路径",
@@ -180,10 +183,12 @@ def _cache_token(value):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def _public_page_cache_name(revision, sort, status_filter, search, limit, cursor):
+def _public_page_cache_name(revision, sort, status_filter, search, limit, cursor,
+                            protocol="all", adapter="all", has_model="all", tag=""):
     return (
         f"{_PUBLIC_PAGE_CACHE_PREFIX}{revision}:{sort}:{status_filter}:"
-        f"{_cache_token(search)}:{int(limit)}:{_cache_token(cursor)}"
+        f"{_cache_token(search)}:{int(limit)}:{_cache_token(cursor)}:"
+        f"{protocol}:{adapter}:{has_model}:{_cache_token(tag)}"
     )
 
 
@@ -352,7 +357,8 @@ def _migrate(conn):
                       ("sort_order", "INTEGER DEFAULT 0"), ("check_path", "TEXT DEFAULT ''"),
                       ("openai_status", "TEXT DEFAULT 'unknown'"), ("anthropic_status", "TEXT DEFAULT 'unknown'"),
                       ("created_at", "INTEGER"),
-                      ("monitor_count", "INTEGER DEFAULT 0"), ("strict_count", "INTEGER DEFAULT 0")):
+                      ("monitor_count", "INTEGER DEFAULT 0"), ("strict_count", "INTEGER DEFAULT 0"),
+                      ("tags", "TEXT DEFAULT ''"), ("next_strict_check_at", "INTEGER DEFAULT 0")):
         if col not in cols:
             conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {col} {decl}")
     # Stamp legacy rows that predate the created_at column with the current
@@ -467,7 +473,8 @@ def init_db():
             model_probe_adapter TEXT DEFAULT '',
             next_check_at INTEGER DEFAULT 0,
             sort_order INTEGER DEFAULT 0, check_path TEXT DEFAULT '',
-            monitor_count INTEGER DEFAULT 0, strict_count INTEGER DEFAULT 0
+            monitor_count INTEGER DEFAULT 0, strict_count INTEGER DEFAULT 0,
+            tags TEXT DEFAULT '', next_strict_check_at INTEGER DEFAULT 0
         )""")
         conn.execute("CREATE TABLE IF NOT EXISTS tbl_settings (k TEXT PRIMARY KEY, v TEXT, name TEXT NOT NULL DEFAULT '')")
         conn.execute("""CREATE TABLE IF NOT EXISTS tbl_users (
@@ -482,6 +489,19 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON tbl_sessions(expires_at)")
         _migrate(conn)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_keys_monitor_next ON tbl_keys(monitor_enabled,next_check_at,last_check_at,id)")
+
+        conn.execute("""CREATE TABLE IF NOT EXISTS tbl_check_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key_id INTEGER NOT NULL,
+            kind TEXT NOT NULL,
+            status TEXT NOT NULL,
+            latency_ms INTEGER,
+            error TEXT DEFAULT '',
+            created_at INTEGER NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_check_history_key_created ON tbl_check_history(key_id, created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_keys_strict_next ON tbl_keys(monitor_enabled,next_strict_check_at,id)")
+
         if conn.execute("SELECT 1 FROM tbl_settings LIMIT 1").fetchone() is None:
             conn.executemany("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?)", _setting_rows(_load_defaults()))
 
@@ -490,7 +510,7 @@ def _init_mysql():
     with connection(write=True) as conn:
         _migrate_table_names_mysql(conn)
         statements = [
-            """CREATE TABLE IF NOT EXISTS tbl_keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,openai_status VARCHAR(32) DEFAULT 'unknown',anthropic_status VARCHAR(32) DEFAULT 'unknown',models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,model_verification_version TINYINT DEFAULT 0,model_probe_adapter VARCHAR(64) DEFAULT '',next_check_at BIGINT DEFAULT 0,sort_order BIGINT DEFAULT 0,check_path TEXT,monitor_count BIGINT DEFAULT 0,strict_count BIGINT DEFAULT 0,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at),INDEX idx_keys_monitor_next (monitor_enabled,next_check_at,last_check_at,id)) CHARACTER SET utf8mb4""",
+            """CREATE TABLE IF NOT EXISTS tbl_keys (id BIGINT PRIMARY KEY AUTO_INCREMENT,name TEXT,base_url TEXT NOT NULL,api_key TEXT NOT NULL,supports_anthropic TINYINT DEFAULT 0,supports_openai TINYINT DEFAULT 0,openai_status VARCHAR(32) DEFAULT 'unknown',anthropic_status VARCHAR(32) DEFAULT 'unknown',models LONGTEXT,status VARCHAR(32) DEFAULT 'unknown',latency_ms BIGINT,last_check_at BIGINT,last_error TEXT,monitor_enabled TINYINT DEFAULT 1,interval_sec BIGINT,notes TEXT,created_at BIGINT,check_model TEXT,model_status VARCHAR(32) DEFAULT 'unknown',model_latency_ms BIGINT,model_last_check_at BIGINT,model_last_error TEXT,model_verification_version TINYINT DEFAULT 0,model_probe_adapter VARCHAR(64) DEFAULT '',next_check_at BIGINT DEFAULT 0,next_strict_check_at BIGINT DEFAULT 0,sort_order BIGINT DEFAULT 0,check_path TEXT,tags TEXT,monitor_count BIGINT DEFAULT 0,strict_count BIGINT DEFAULT 0,INDEX idx_keys_monitor_due (monitor_enabled,last_check_at),INDEX idx_keys_monitor_next (monitor_enabled,next_check_at,last_check_at,id),INDEX idx_keys_strict_next (monitor_enabled,next_strict_check_at,id)) CHARACTER SET utf8mb4""",
             "CREATE TABLE IF NOT EXISTS tbl_settings (k VARCHAR(191) PRIMARY KEY,v LONGTEXT,name VARCHAR(255) NOT NULL DEFAULT '') CHARACTER SET utf8mb4",
             "CREATE TABLE IF NOT EXISTS tbl_users (id BIGINT PRIMARY KEY AUTO_INCREMENT,username VARCHAR(64) NOT NULL UNIQUE,password_hash TEXT NOT NULL,must_change_password TINYINT DEFAULT 0,enabled TINYINT NOT NULL DEFAULT 1,created_at BIGINT NOT NULL) CHARACTER SET utf8mb4",
             "CREATE TABLE IF NOT EXISTS tbl_sessions (token_hash CHAR(64) PRIMARY KEY,user_id BIGINT NOT NULL,csrf_token TEXT NOT NULL,created_at BIGINT NOT NULL,expires_at BIGINT NOT NULL,last_seen_at BIGINT NOT NULL,INDEX idx_sessions_expires_at(expires_at),FOREIGN KEY(user_id) REFERENCES tbl_users(id) ON DELETE CASCADE) CHARACTER SET utf8mb4",
@@ -509,15 +529,36 @@ def _init_mysql():
             "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}
         for column in ("openai_status", "anthropic_status", "model_verification_version",
                        "model_probe_adapter", "next_check_at", "created_at",
-                       "monitor_count", "strict_count"):
+                       "monitor_count", "strict_count", "tags", "next_strict_check_at"):
             if column not in key_columns:
-                declaration = (
-                    "BIGINT DEFAULT 0" if column in ("next_check_at", "monitor_count", "strict_count")
-                    else ("TINYINT DEFAULT 0" if column == "model_verification_version"
-                          else ("VARCHAR(32) DEFAULT 'unknown'" if column in ("openai_status", "anthropic_status")
-                                else ("VARCHAR(64) DEFAULT ''" if column == "model_probe_adapter" else "BIGINT")))
-                )
+                if column == "tags":
+                    declaration = "TEXT"
+                elif column in ("next_check_at", "monitor_count", "strict_count", "next_strict_check_at"):
+                    declaration = "BIGINT DEFAULT 0"
+                elif column == "model_verification_version":
+                    declaration = "TINYINT DEFAULT 0"
+                elif column in ("openai_status", "anthropic_status"):
+                    declaration = "VARCHAR(32) DEFAULT 'unknown'"
+                elif column == "model_probe_adapter":
+                    declaration = "VARCHAR(64) DEFAULT ''"
+                else:
+                    declaration = "BIGINT"
                 conn.execute(f"ALTER TABLE tbl_keys ADD COLUMN {column} {declaration}")
+        conn.execute("""CREATE TABLE IF NOT EXISTS tbl_check_history (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            key_id BIGINT NOT NULL,
+            kind VARCHAR(16) NOT NULL,
+            status VARCHAR(32) NOT NULL,
+            latency_ms BIGINT,
+            error TEXT,
+            created_at BIGINT NOT NULL,
+            INDEX idx_check_history_key_created (key_id, created_at)
+        ) CHARACTER SET utf8mb4""")
+        index_names = {row["INDEX_NAME"] for row in conn.execute(
+            "SELECT INDEX_NAME FROM information_schema.statistics "
+            "WHERE table_schema=DATABASE() AND table_name='tbl_keys'")}
+        if "idx_keys_strict_next" not in index_names:
+            conn.execute("CREATE INDEX idx_keys_strict_next ON tbl_keys(monitor_enabled,next_strict_check_at,id)")
         # Stamp legacy rows missing a created_at value with the migration time
         # so the dashboard has a usable reference for every entry.
         backfill_now = int(time.time())
@@ -683,6 +724,8 @@ def public_key(entry, include_secret=False):
     secret = out.get("api_key") or ""
     out["api_key_masked"] = mask_api_key(secret)
     out["has_api_key"] = bool(secret)
+    out["tags"] = str(out.get("tags") or "")
+    out["tag_list"] = tags_list(out.get("tags"))
     if include_secret:
         out["api_key"] = secret
     else:
@@ -794,9 +837,46 @@ def _status_or_strict_model_condition(statuses):
     )
 
 
-def _page_conditions(status_filter="all", search=""):
+
+def normalize_tags(value):
+    """Normalize free-form tags into a comma-separated string (max 20, 32 chars each)."""
+    import re as _re
+    parts = _re.split(r"[,，;|/\s]+", str(value or ""))
+    out, seen = [], set()
+    for part in parts:
+        tag = str(part or "").strip()
+        if not tag:
+            continue
+        tag = tag[:32]
+        key = tag.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(tag)
+        if len(out) >= 20:
+            break
+    return ",".join(out)
+
+
+def tags_list(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return []
+    return [part for part in (p.strip() for p in raw.split(",")) if part]
+
+
+def _page_conditions(status_filter="all", search="", protocol="all", adapter="all", has_model="all", tag=""):
     if status_filter not in (*_PAGE_STATUSES.keys(), "issue", "problem"):
         raise ValueError("invalid status filter")
+    protocol = str(protocol or "all").lower()
+    adapter = str(adapter or "all").lower()
+    has_model = str(has_model or "all").lower()
+    if protocol not in ("all", "openai", "anthropic", "both"):
+        raise ValueError("invalid protocol filter")
+    if adapter not in ("all", "openai_chat", "openai_responses", "anthropic_messages", "none"):
+        raise ValueError("invalid adapter filter")
+    if has_model not in ("all", "yes", "no"):
+        raise ValueError("invalid has_model filter")
     conditions, values = [], []
     if status_filter == "issue":
         condition, status_values = _status_or_strict_model_condition(_ISSUE_STATUSES)
@@ -813,13 +893,35 @@ def _page_conditions(status_filter="all", search=""):
         if statuses:
             conditions.append("status IN (" + ",".join("?" for _ in statuses) + ")")
             values.extend(statuses)
+    if protocol == "openai":
+        conditions.append("COALESCE(supports_openai,0)=1")
+    elif protocol == "anthropic":
+        conditions.append("COALESCE(supports_anthropic,0)=1")
+    elif protocol == "both":
+        conditions.append("COALESCE(supports_openai,0)=1 AND COALESCE(supports_anthropic,0)=1")
+    if adapter == "none":
+        conditions.append("COALESCE(model_probe_adapter,'')=''")
+    elif adapter != "all":
+        conditions.append("COALESCE(model_probe_adapter,'')=?")
+        values.append(adapter)
+    if has_model == "yes":
+        conditions.append("TRIM(COALESCE(check_model,''))!=''")
+    elif has_model == "no":
+        conditions.append("TRIM(COALESCE(check_model,''))=''")
+    tag_term = str(tag or "").strip().lower()
+    if tag_term:
+        # Shared SQLite/MySQL expression: exact tag, start, middle, or end.
+        tag_term = tag_term.replace(" ", "")
+        conditions.append("(LOWER(COALESCE(tags,''))=? OR LOWER(COALESCE(tags,'')) LIKE ? "
+                          "OR LOWER(COALESCE(tags,'')) LIKE ? OR LOWER(COALESCE(tags,'')) LIKE ?)")
+        values.extend([tag_term, tag_term + ",%", "%," + tag_term + ",%", "%," + tag_term])
     term = str(search or "").strip().lower()
     if term:
         like = f"%{term}%"
         conditions.append("(LOWER(COALESCE(name,'')) LIKE ? OR LOWER(COALESCE(base_url,'')) LIKE ? "
                           "OR LOWER(COALESCE(check_model,'')) LIKE ? OR LOWER(COALESCE(notes,'')) LIKE ? "
-                          "OR LOWER(COALESCE(models,'')) LIKE ?)")
-        values.extend([like] * 5)
+                          "OR LOWER(COALESCE(models,'')) LIKE ? OR LOWER(COALESCE(tags,'')) LIKE ?)")
+        values.extend([like] * 6)
     return conditions, values
 
 
@@ -854,20 +956,27 @@ def _page_summary(conn, conditions, values):
     }
 
 
-def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="default"):
+def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="default",
+                   protocol="all", adapter="all", has_model="all", tag=""):
     """Return one stable-order public page without shipping the entire key list."""
     sort = _normalize_sort(sort)
     limit = max(1, min(int(limit), 100))
     status_filter = str(status_filter or "all")
     search = "" if search is None else str(search)
     cursor = "" if cursor is None else str(cursor)
+    protocol = str(protocol or "all")
+    adapter = str(adapter or "all")
+    has_model = str(has_model or "all")
+    tag = "" if tag is None else str(tag)
     revision = get_list_revision()
-    cache_name = _public_page_cache_name(revision, sort, status_filter, search, limit, cursor)
+    cache_name = _public_page_cache_name(
+        revision, sort, status_filter, search, limit, cursor, protocol, adapter, has_model, tag
+    )
     cached = _cache_get(cache_name)
     if cached is not None:
         return cached
-    facet_conditions, facet_values = _page_conditions("all", search)
-    base_conditions, base_values = _page_conditions(status_filter, search)
+    facet_conditions, facet_values = _page_conditions("all", search, protocol, adapter, has_model, tag)
+    base_conditions, base_values = _page_conditions(status_filter, search, protocol, adapter, has_model, tag)
     cursor_parts = _page_cursor_decode(cursor, expected_sort=sort)
     conditions, values = list(base_conditions), list(base_values)
     order_by = _page_order_by(sort)
@@ -956,11 +1065,12 @@ def add_key(data):
     with connection(write=True) as conn:
         sort_order = _next_sort_order(conn)
         cur = conn.execute("""INSERT INTO tbl_keys
-            (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order,check_path)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order,check_path,tags)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
             (data.get("name", ""), data["base_url"], data["api_key"], "unknown",
              int(bool(data.get("monitor_enabled", 1))), data.get("interval_sec"), data.get("notes", ""),
-             int(time.time()), data.get("check_model", ""), sort_order, data.get("check_path", "")))
+             int(time.time()), data.get("check_model", ""), sort_order, data.get("check_path", ""),
+             normalize_tags(data.get("tags", ""))))
         key_id = cur.lastrowid
     touch_list_generation()
     return key_id
@@ -979,11 +1089,12 @@ def add_keys_batch(items):
                 continue
             existing.add(marker)
             cur = conn.execute("""INSERT INTO tbl_keys
-            (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order,check_path)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            (name,base_url,api_key,status,monitor_enabled,interval_sec,notes,created_at,check_model,sort_order,check_path,tags)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (item.get("name", ""), marker[0], marker[1], "unknown",
                  int(bool(item.get("monitor_enabled", 1))), item.get("interval_sec"), item.get("notes", ""),
-                 int(time.time()), item.get("check_model", ""), sort_order, item.get("check_path", "")))
+                 int(time.time()), item.get("check_model", ""), sort_order, item.get("check_path", ""),
+                 normalize_tags(item.get("tags", ""))))
             ids.append(cur.lastrowid)
             sort_order += 10
         touch_list_generation()
@@ -1019,20 +1130,20 @@ def reorder_keys(ids):
 
 
 def update_key(key_id, data):
-    allowed = ("name", "base_url", "api_key", "monitor_enabled", "interval_sec", "notes", "check_model", "check_path")
+    allowed = ("name", "base_url", "api_key", "monitor_enabled", "interval_sec", "notes", "check_model", "check_path", "tags")
     fields, values = [], []
     for col in allowed:
         if col in data:
             fields.append(f"{col}=?")
-            values.append(data[col])
+            values.append(normalize_tags(data[col]) if col == "tags" else data[col])
     if not fields:
         return False
     if "base_url" in data or "api_key" in data:
         fields.extend(["status='unknown'", "supports_openai=0", "supports_anthropic=0", "openai_status='unknown'", "anthropic_status='unknown'", "models='[]'",
                        "latency_ms=NULL", "last_check_at=NULL", "last_error=''", "model_status='unknown'",
                        "model_latency_ms=NULL", "model_last_check_at=NULL", "model_last_error=''",
-                       "model_verification_version=0", "model_probe_adapter=''", "next_check_at=0"])
-    elif "monitor_enabled" in data or "interval_sec" in data:
+                       "model_verification_version=0", "model_probe_adapter=''", "next_check_at=0", "next_strict_check_at=0"])
+    elif "monitor_enabled" in data or "interval_sec" in data or "check_model" in data:
         # A newly enabled key or changed cadence should be reconsidered without
         # waiting for the previous schedule to expire.
         fields.append("next_check_at=0")
@@ -1049,16 +1160,49 @@ def delete_keys(ids):
         return 0
     with connection(write=True) as conn:
         marks = ",".join("?" for _ in ids)
+        conn.execute(f"DELETE FROM tbl_check_history WHERE key_id IN ({marks})", list(ids))
         count = conn.execute(f"DELETE FROM tbl_keys WHERE id IN ({marks})", list(ids)).rowcount
     if count:
         touch_list_generation()
     return count
 
 
+def _record_check_history(conn, key_id, kind, status, latency_ms, error, checked_at):
+    conn.execute("""INSERT INTO tbl_check_history(key_id,kind,status,latency_ms,error,created_at)
+                  VALUES(?,?,?,?,?,?)""",
+                 (int(key_id), kind, str(status or "unknown")[:32], latency_ms,
+                  str(error or "")[:300], int(checked_at)))
+
+
+def list_check_history(key_id, limit=30):
+    limit = max(1, min(int(limit), 100))
+    with connection() as conn:
+        rows = conn.execute("""SELECT kind,status,latency_ms,error,created_at FROM tbl_check_history
+                             WHERE key_id=? ORDER BY created_at DESC,id DESC LIMIT ?""",
+                            (int(key_id), limit)).fetchall()
+    return [dict(row) for row in rows]
+
+
+def update_models(key_id, models):
+    clean = []
+    for model in models or []:
+        value = str(model or "").strip()
+        if value and value not in clean:
+            clean.append(value)
+        if len(clean) >= 500:
+            break
+    with connection(write=True) as conn:
+        conn.execute("UPDATE tbl_keys SET models=? WHERE id=?", (json.dumps(clean, ensure_ascii=False), int(key_id)))
+    touch_list_generation()
+    return clean
+
+
 def update_status(key_id, status, latency_ms, error, supports_anthropic=None, supports_openai=None, models=None,
-                  openai_status=None, anthropic_status=None, next_check_at=None, bump_monitor_count=True):
+                  openai_status=None, anthropic_status=None, next_check_at=None, bump_monitor_count=True,
+                  record_history=True):
+    checked_at = int(time.time())
     sets = ["status=?", "latency_ms=?", "last_error=?", "last_check_at=?"]
-    values = [status, latency_ms, (error or "")[:300], int(time.time())]
+    values = [status, latency_ms, (error or "")[:300], checked_at]
     if supports_anthropic is not None:
         sets.append("supports_anthropic=?"); values.append(int(bool(supports_anthropic)))
     if supports_openai is not None:
@@ -1075,16 +1219,22 @@ def update_status(key_id, status, latency_ms, error, supports_anthropic=None, su
         sets.append("monitor_count=COALESCE(monitor_count, 0)+1")
     with connection(write=True) as conn:
         conn.execute(f"UPDATE tbl_keys SET {', '.join(sets)} WHERE id=?", (*values, key_id))
+        if record_history:
+            _record_check_history(conn, key_id, "health", status, latency_ms, error, checked_at)
     touch_list_generation()
 
 
-def update_model_status(key_id, status, latency_ms, error, verification_version=1, adapter=""):
+def update_model_status(key_id, status, latency_ms, error, verification_version=1, adapter="", next_check_at=None):
+    checked_at = int(time.time())
+    next_clause = "next_strict_check_at=?," if next_check_at is not None else ""
+    next_values = [int(next_check_at)] if next_check_at is not None else []
     with connection(write=True) as conn:
         conn.execute("""UPDATE tbl_keys SET model_status=?, model_latency_ms=?, model_last_error=?,
                       model_last_check_at=?, model_verification_version=?, model_probe_adapter=?,
-                      strict_count=COALESCE(strict_count, 0)+1 WHERE id=?""",
-                     (status, latency_ms, (error or "")[:300], int(time.time()), verification_version,
-                      (adapter or "")[:64], key_id))
+                      """ + next_clause + """ strict_count=COALESCE(strict_count, 0)+1 WHERE id=?""",
+                     (status, latency_ms, (error or "")[:300], checked_at, verification_version,
+                      (adapter or "")[:64], *next_values, key_id))
+        _record_check_history(conn, key_id, "strict", status, latency_ms, error, checked_at)
     touch_list_generation()
 
 
@@ -1113,6 +1263,16 @@ def monitor_next_check_at(entry, status, settings, checked_at=None):
     return checked_at + max(1, interval + jitter)
 
 
+def strict_next_check_at(entry, settings, checked_at=None):
+    """Return a deterministic, spread-out timestamp for the next strict probe."""
+    checked_at = int(time.time() if checked_at is None else checked_at)
+    interval = max(300, int(settings.get("strictIntervalSec", 21600) or 21600))
+    spread = max(1, interval // 20)
+    key_id = int(entry.get("id") or 0)
+    jitter = ((key_id * 1664525 + 1013904223) % (spread * 2 + 1)) - spread
+    return checked_at + max(1, interval + jitter)
+
+
 def get_due_keys(now, up_interval=None, down_interval=None, limit=None):
     """Return only due monitor rows through the indexed next-check schedule.
 
@@ -1129,5 +1289,21 @@ def get_due_keys(now, up_interval=None, down_interval=None, limit=None):
         rows = conn.execute(
             "SELECT * FROM tbl_keys WHERE monitor_enabled=1 AND next_check_at<=? "
             "ORDER BY next_check_at ASC,last_check_at ASC,id ASC LIMIT ?",
+            (int(now), cap)).fetchall()
+    return [_row_to_dict(row) for row in rows]
+
+
+def get_due_strict_keys(now, limit=None):
+    """Return monitored, model-configured keys due for a periodic strict probe."""
+    try:
+        cap = max(0, int(limit)) if limit is not None else 1000
+    except (TypeError, ValueError):
+        cap = 1000
+    if not cap:
+        return []
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM tbl_keys WHERE monitor_enabled=1 AND TRIM(COALESCE(check_model,''))!='' "
+            "AND next_strict_check_at<=? ORDER BY next_strict_check_at ASC,model_last_check_at ASC,id ASC LIMIT ?",
             (int(now), cap)).fetchall()
     return [_row_to_dict(row) for row in rows]

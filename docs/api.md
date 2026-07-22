@@ -434,6 +434,17 @@ GET /api/sync/status
 GET /api/settings
 ```
 
+`GET /api/keys/page` additionally accepts optional `protocol` (`all|openai|anthropic|both`), `adapter` (`all|openai_chat|openai_responses|anthropic_messages|none`), `has_model` (`all|yes|no`), and exact `tag` filters. List rows expose normalized `tags` plus `tag_list`, never a plaintext API key.
+
+### 检测历史与模型刷新
+
+```http
+GET /api/keys/{id}/history?limit=30
+POST /api/keys/{id}/models/refresh
+```
+
+历史返回最近的 `health` / `strict` 结果（状态、延迟、截断错误和时间），不包含密钥。模型刷新使用该条目的现有凭据请求远端模型列表，并返回 `{id, models, count, error}`；失败信息已截断且不会包含凭据。
+
 ### 保存设置
 
 ```http
@@ -452,8 +463,12 @@ Content-Type: application/json
   "requestTimeoutSec": "45",
   "autoClassifyOnAdd": "1",
   "uiRefreshIntervalSec": "5"
+  ,"strictMonitorEnabled": "0",
+  "strictIntervalSec": "21600"
 }
 ```
+
+`strictMonitorEnabled=1` 时，后台会对已启用监测且配置了 `check_model` 的 Key 按 `strictIntervalSec` 单独执行严格验证。严格验证与普通连通性监测使用独立的到期时间和索引，但共享全局并发上限。
 
 ## 系统操作
 
@@ -518,7 +533,7 @@ GET /api/tasks/{task_id}
 
 ### JSON 导出字段
 
-单条/批量 `fmt=json` 仅输出可移植配置字段：`name`、`base_url`、`api_key`、`check_model`、`check_path`（不含 `id`、状态、协议能力等内部字段）。
+单条/批量 `fmt=json` 仅输出可移植配置字段：`name`、`base_url`、`api_key`、`check_model`、`check_path`、`tags`（不含 `id`、状态、协议能力等内部字段）。
 
 
 ### 备份全部（JSON）

@@ -46,6 +46,8 @@ with db.connection(write=True) as conn:
 | `monitor_enabled`, `interval_sec`, `next_check_at` | per-key schedule (`interval_sec` nullable); indexed persisted next due time |
 | `check_model`, `model_status`, `model_latency_ms`, `model_last_check_at`, `model_last_error`, `model_probe_adapter` | optional strict model probe; adapter records the successful call shape (`openai_chat`, `openai_responses`, `anthropic_messages`) |
 | `monitor_count`, `strict_count` | integer counters (default 0); `update_status` bumps monitor, `update_model_status` bumps strict |
+| `tags` | normalized comma-separated operator metadata; public rows expose both the stored value and `tag_list` |
+| `next_strict_check_at` | separate persisted due time for periodic strict model validation; it must not alter `next_check_at` |
 | `sort_order` | drag-and-drop; new keys get lower-than-min order (top of list) |
 | `notes`, `created_at` | metadata |
 
@@ -307,6 +309,8 @@ explicitly excluded by `get_public_settings()`.
 - `get_due_keys(now, ..., limit)` reads only `monitor_enabled=1` rows with
   `next_check_at <= now` through `idx_keys_monitor_next`; do not return to a
   Python-side scan of every enabled key.
+- `tbl_check_history` stores bounded, non-secret health/strict outcomes. Query it newest-first by `key_id`; never place API keys or raw request payloads in history errors.
+- Shared list queries must use SQL supported by both SQLite and MySQL. Do not use engine-specific concatenation helpers for tag matching.
 
 ## Scenario: Indexed monitor scheduling and shared probe capacity
 

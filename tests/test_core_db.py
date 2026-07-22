@@ -522,6 +522,32 @@ class DbTests(unittest.TestCase):
         self.assertEqual(int(pub["monitor_count"]), 2)
         self.assertEqual(int(pub["strict_count"]), 1)
 
+    def test_tags_filter_history_and_strict_due_rows(self):
+        first = db.add_key({"name": "prod", "base_url": "https://a.example", "api_key": "sk-a",
+                            "tags": "生产, OpenAI  生产", "check_model": "gpt"})
+        second = db.add_key({"name": "other", "base_url": "https://b.example", "api_key": "sk-b",
+                             "tags": "测试"})
+        self.assertEqual(db.get_key(first, public=True)["tag_list"], ["生产", "OpenAI"])
+        page = db.list_keys_page(tag="openai")
+        self.assertEqual([item["id"] for item in page["items"]], [first])
+        db.update_status(first, "up", 12, "")
+        db.update_model_status(first, "up", 8, "", next_check_at=100)
+        history = db.list_check_history(first, 10)
+        self.assertEqual([row["kind"] for row in history], ["strict", "health"])
+        with db.connection(write=True) as conn:
+            conn.execute("UPDATE tbl_keys SET next_strict_check_at=? WHERE id=?", (1, first))
+            conn.execute("UPDATE tbl_keys SET next_strict_check_at=? WHERE id=?", (1, second))
+            conn.execute("UPDATE tbl_keys SET check_model='' WHERE id=?", (second,))
+        self.assertEqual([row["id"] for row in db.get_due_strict_keys(2)], [first])
+
+    def test_model_refresh_updates_only_model_cache(self):
+        from services.key_service import KEYS
+        key_id = db.add_key({"base_url": "https://models.example", "api_key": "sk-models"})
+        with patch("core.list_remote_models", return_value={"models": ["gpt-4", "gpt-4"], "error": ""}):
+            result = KEYS.refresh_models(key_id)
+        self.assertEqual(result["models"], ["gpt-4"])
+        self.assertEqual(db.get_key(key_id)["models"], ["gpt-4"])
+
     def test_endpoint_edit_resets_status(self):
         key_id = db.add_key({"base_url": "https://a.example", "api_key": "sk-old"})
         db.update_status(key_id, "up", 12, "", True, True, ["x"])

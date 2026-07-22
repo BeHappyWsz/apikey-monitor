@@ -29,6 +29,7 @@ const state = {
   fingerprint: "",
   revision: "",
   nextCursor: "", hasMore: false, total: 0, summary: {}, pageLoading: false, refreshPending: false,
+  filters: { protocol: "all", adapter: "all", has_model: "all", tag: "" },
 };
 
 async function api(method, path, body, options) {
@@ -42,6 +43,9 @@ const listUi = {};
 function pagePath(cursor = "") {
   const params = new URLSearchParams({ limit: "50", status: state.status || "all", sort: state.sort || "default" });
   if (state.query.trim()) params.set("q", state.query.trim());
+  for (const [name, value] of Object.entries(state.filters)) {
+    if (value && value !== "all") params.set(name, value);
+  }
   if (cursor) params.set("cursor", cursor);
   return `/api/keys/page?${params}`;
 }
@@ -157,6 +161,22 @@ $("#sort-filter").addEventListener("click", (event) => {
   state.hasMore = false;
   $$("#sort-filter .seg").forEach((item) => item.classList.toggle("active", item.dataset.sort === state.sort));
   load();
+});
+function applyAdvancedFilters() {
+  state.filters = {
+    protocol: $("#filter-protocol").value,
+    adapter: $("#filter-adapter").value,
+    has_model: $("#filter-model").value,
+    tag: $("#filter-tag").value.trim(),
+  };
+  state.nextCursor = "";
+  state.hasMore = false;
+  load();
+}
+["#filter-protocol", "#filter-adapter", "#filter-model"].forEach((sel) => $(sel).addEventListener("change", applyAdvancedFilters));
+$("#filter-tag").addEventListener("input", () => {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(applyAdvancedFilters, 260);
 });
 $("#btn-refresh").addEventListener("click", () => { exportUi.closeMoreMenu(); load(); });
 

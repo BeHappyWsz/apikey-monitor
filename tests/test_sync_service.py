@@ -248,7 +248,7 @@ class SyncServiceTests(_DBPatchedCase):
         self.svc().upload()
         envelope = json.loads(self.state.data["/dav" + self.remote])
         self.assertEqual(set(envelope), {"app", "schema", "exported_at", "keys"})
-        self.assertEqual(set(envelope["keys"][0]), {"name", "base_url", "api_key", "check_model", "check_path"})
+        self.assertEqual(set(envelope["keys"][0]), {"name", "base_url", "api_key", "check_model", "check_path", "tags"})
         self.state.data["/dav" + self.remote] = core.dumps_sync_payload([
             {"name": "remote", "base_url": "https://remote.com", "api_key": "sk-remote"},
         ], 1).encode("utf-8")

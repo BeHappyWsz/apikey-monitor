@@ -209,6 +209,12 @@ body {
   max-width: none;
   box-sizing: border-box;
 }
+.advanced-filters { grid-column: 1 / -1; display: flex; gap: 8px; min-width: 0; }
+.advanced-filters select, .advanced-filters input { min-width: 0; flex: 1 1 0; }
+.history-list { display: grid; gap: 6px; max-height: 420px; overflow: auto; }
+.history-row { display: grid; grid-template-columns: 72px 72px 68px 1fr; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.history-row small { grid-column: 1 / -1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-chip { border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); }
 .seg {
   border: 0; background: transparent; color: var(--muted); border-radius: 8px;
   padding: 6px 9px; cursor: pointer; font-size: 12px; white-space: nowrap;
@@ -520,6 +526,8 @@ table.cand input { padding: 4px 6px; }
   .status-filter { width: 100%; max-width: none; overflow: visible; }
   .sort-filter { width: auto; align-self: flex-start; }
   .filter { width: 100%; min-width: 0; max-width: none; }
+  .advanced-filters { flex-wrap: wrap; }
+  .advanced-filters select, .advanced-filters input { flex: 1 1 calc(50% - 4px); min-height: 40px; }
   .list-wrap { padding: 0 12px 28px; }
   .key-list { grid-template-columns: 1fr; }
   .hero-panel { grid-template-columns: 1fr; }

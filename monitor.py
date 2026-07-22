@@ -53,7 +53,7 @@ def _wait_task(task_id, poll_sec=0.5):
 
 
 def tick():
-    """Pick due keys (capped), run health batch, wait so ticks never overlap."""
+    """Run capped health and opt-in strict batches without overlapping ticks."""
     global _inflight
     with _inflight_lock:
         if _inflight:
@@ -71,10 +71,14 @@ def tick():
             int(settings.get("downRecheckIntervalSec", 120)),
             limit=max_per_tick,
         )
-        if not due:
-            return
-        task = KEYS.batch_check([item["id"] for item in due], health=True)
-        _wait_task(task.get("task_id") if isinstance(task, dict) else None)
+        if due:
+            task = KEYS.batch_check([item["id"] for item in due], health=True)
+            _wait_task(task.get("task_id") if isinstance(task, dict) else None)
+        if settings.get("strictMonitorEnabled") == "1":
+            strict_due = db.get_due_strict_keys(int(time.time()), limit=max_per_tick)
+            if strict_due:
+                task = KEYS.batch_check_model([item["id"] for item in strict_due])
+                _wait_task(task.get("task_id") if isinstance(task, dict) else None)
     finally:
         with _inflight_lock:
             _inflight = False

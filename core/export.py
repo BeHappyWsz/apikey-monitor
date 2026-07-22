@@ -50,6 +50,7 @@ def _export_entry_dict(entry):
         "api_key": str(entry.get("api_key") or ""),
         "check_model": entry.get("check_model") or "",
         "check_path": entry.get("check_path") or "",
+        "tags": entry.get("tags") or "",
     }
 
 
@@ -322,5 +323,6 @@ def parse_sync_payload(text):
             "api_key": str(api_key or ""),
             "check_model": str(item.get("check_model") or "")[:200],
             "check_path": check_path,
+            "tags": str(item.get("tags") or "")[:640],
         })
     return out

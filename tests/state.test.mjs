@@ -12,6 +12,7 @@ test("stale response",()=>assert.equal(isLatestResponse(1,2),false));
 test("move key before target",()=>assert.deepEqual(moveKey(keys,2,1).map(k=>k.id),[2,1]));
 test("reorder only all unfiltered",()=>assert.equal(canReorder("all",""),true));
 test("reorder disabled while filtered",()=>assert.equal(canReorder("up",""),false));
+test("reorder disabled with advanced filters",()=>assert.equal(canReorder("all","","default",{protocol:"openai"}),false));
 const issueKeys=[{id:1,status:"rate_limited",name:"R"},{id:2,status:"degraded",name:"D"},{id:3,status:"up",name:"U"},{id:4,status:"up",name:"M",model_status:"degraded",model_verification_version:1}];
 test("issue filtering",()=>assert.deepEqual(getVisibleKeys(issueKeys,"issue","").map(k=>k.id),[1,2,4]));
 test("rate limit filtering uses overall status",()=>assert.deepEqual(getVisibleKeys(issueKeys,"rate_limited","").map(k=>k.id),[1]));
@@ -63,6 +64,11 @@ test("card shows monitor and strict counts and access tag",()=>{
   assert.match(html,/直连 Chat/);
   assert.doesNotMatch(html,/接入建议/);
   assert.doesNotMatch(html,/count-chip/);
+});
+test("card renders normalized tags and history action",()=>{
+  const html=renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",tag_list:["生产","OpenAI"]},cardState);
+  assert.match(html,/生产/);
+  assert.match(html,/查看历史/);
 });
 test("card marks strict model failures as access problems",()=>{
   const html=renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",check_model:"gpt-test",model_status:"degraded",model_last_error:"HTTP 503",model_verification_version:1},cardState);

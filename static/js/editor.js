@@ -41,6 +41,7 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
     $("#edit-check-model").value = key.check_model || "";
     $("#edit-check-path").value = key.check_path || "";
     $("#edit-notes").value = key.notes || "";
+    $("#edit-tags").value = key.tags || (key.tag_list || []).join(", ");
     $("#edit-monitor").value = key.monitor_enabled ? "1" : "0";
     $("#edit-interval").value = key.interval_sec || "";
     $("#model-suggestions").innerHTML = (key.models || []).map((model) => `<option value="${esc(model)}">`).join("");
@@ -101,6 +102,7 @@ export function initEditor({ api, state, load, openModal, closeModal }) {
       check_model: $("#edit-check-model").value.trim(),
       check_path: $("#edit-check-path").value.trim(),
       notes: $("#edit-notes").value.trim(),
+      tags: $("#edit-tags").value.trim(),
       monitor_enabled: $("#edit-monitor").value === "1" ? 1 : 0,
       interval_sec: $("#edit-interval").value.trim() || null,
       check_after_save: checkAfter,

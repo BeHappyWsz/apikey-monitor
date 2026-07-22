@@ -90,6 +90,14 @@ class ListRevisionTests(unittest.TestCase):
             conn.execute("UPDATE tbl_keys SET next_check_at=? WHERE id=?", (now + 3600, future_id))
         self.assertEqual([entry["id"] for entry in db.get_due_keys(now, limit=10)], [due_id])
 
+    def test_get_due_strict_keys_requires_configured_model(self):
+        now = int(time.time())
+        due = db.add_key({"base_url": "https://strict.example", "api_key": "sk-strict", "check_model": "gpt"})
+        no_model = db.add_key({"base_url": "https://none.example", "api_key": "sk-none"})
+        with db.connection(write=True) as conn:
+            conn.execute("UPDATE tbl_keys SET next_strict_check_at=? WHERE id IN (?,?)", (now - 1, due, no_model))
+        self.assertEqual([row["id"] for row in db.get_due_strict_keys(now)], [due])
+
 
 class MonitorTickGuardTests(unittest.TestCase):
     def test_tick_skips_when_inflight(self):
@@ -129,6 +137,15 @@ class MonitorTickGuardTests(unittest.TestCase):
                 self.assertEqual(kwargs.args[3], 6)
             self.assertEqual(len(calls), 1)
             self.assertTrue(calls[0][1] is True)
+
+    def test_tick_runs_strict_batch_when_enabled(self):
+        monitor._inflight = False
+        with patch("db.get_all_settings", return_value={"globalMonitorEnabled": "1", "strictMonitorEnabled": "1", "concurrency": "2", "globalIntervalSec": "300", "downRecheckIntervalSec": "120"}), \
+             patch("db.get_due_keys", return_value=[]), patch("db.get_due_strict_keys", return_value=[{"id": 7}]), \
+             patch.object(monitor.KEYS, "batch_check_model", return_value={"task_id": "strict-test"}) as batch, \
+             patch.object(monitor, "_wait_task"):
+            monitor.tick()
+        batch.assert_called_once_with([7])
 
 
 if __name__ == "__main__":

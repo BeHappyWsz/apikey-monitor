@@ -16,6 +16,8 @@ from core.webdav import WebDAVError
 
 _KEY_RE = re.compile(r"^/api/keys/(\d+)$")
 _KEY_ACTION_RE = re.compile(r"^/api/keys/(\d+)/(check|check_model|export|secret)$")
+_KEY_HISTORY_RE = re.compile(r"^/api/keys/(\d+)/history$")
+_KEY_MODELS_REFRESH_RE = re.compile(r"^/api/keys/(\d+)/models/refresh$")
 _TASK_RE = re.compile(r"^/api/tasks/([A-Za-z0-9_-]+)$")
 _RESTART_RE = re.compile(r"^/api/system/restart/([A-Za-z0-9_-]+)$")
 _AUTH_USER_RE = re.compile(r"^/api/auth/users/(\d+)$")
@@ -134,7 +136,11 @@ def route(method, path, query, body, server, request=None):
             limit = int(params.get("limit", ["50"])[0])
             return 200, KEYS.page(limit, params.get("cursor", [""])[0],
                                   params.get("status", ["all"])[0], params.get("q", [""])[0],
-                                  sort=params.get("sort", ["default"])[0])
+                                  sort=params.get("sort", ["default"])[0],
+                                  protocol=params.get("protocol", ["all"])[0],
+                                  adapter=params.get("adapter", ["all"])[0],
+                                  has_model=params.get("has_model", ["all"])[0],
+                                  tag=params.get("tag", [""])[0])
         except ValueError as exc:
             raise ApiError(400, "invalid_page", str(exc))
     if method == "GET" and path == "/api/keys/revision":
@@ -160,6 +166,15 @@ def route(method, path, query, body, server, request=None):
         entry = KEYS.get(_id(match), public=True)
         if not entry: raise ApiError(404, "key_not_found", "Key 不存在")
         return 200, entry
+    match = _KEY_HISTORY_RE.fullmatch(path)
+    if method == "GET" and match:
+        entry = KEYS.get(_id(match), public=True)
+        if not entry: raise ApiError(404, "key_not_found", "Key 不存在")
+        try:
+            limit = int(parse_qs(query).get("limit", ["30"])[0])
+        except ValueError:
+            raise ApiError(400, "invalid_history", "invalid history limit")
+        return 200, {"id": entry["id"], "items": db.list_check_history(entry["id"], limit)}
     match = _KEY_ACTION_RE.fullmatch(path)
     if method == "GET" and match and match.group(2) == "export":
         entry = KEYS.get(_id(match), public=False)
@@ -182,6 +197,12 @@ def route(method, path, query, body, server, request=None):
 
     if method == "POST" and path == "/api/import/parse":
         return 200, {"candidates": core.parse_import_text((body or {}).get("text", ""))}
+    match = _KEY_MODELS_REFRESH_RE.fullmatch(path)
+    if method == "POST" and match:
+        try:
+            return 200, KEYS.refresh_models(_id(match))
+        except KeyError: raise ApiError(404, "key_not_found", "Key 不存在")
+        except RuntimeError as exc: raise ApiError(409, "check_conflict", str(exc))
     if method == "POST" and path == "/api/keys":
         try: payload = validators.key_payload(body)
         except ValueError as exc: raise ApiError(400, "invalid_key", str(exc))

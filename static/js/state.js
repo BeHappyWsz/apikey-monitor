@@ -74,8 +74,9 @@ export function moveKey(keys, sourceId, targetId) {
   return next;
 }
 
-export function canReorder(status, query, sort = "default") {
-  return status === "all" && !String(query || "").trim() && (sort || "default") === "default";
+export function canReorder(status, query, sort = "default", filters = {}) {
+  return status === "all" && !String(query || "").trim() && (sort || "default") === "default"
+    && Object.values(filters || {}).every((value) => !value || value === "all");
 }
 
 export function keysFingerprint(keys) {
@@ -86,5 +87,6 @@ export function keysFingerprint(keys) {
     key.base_url, key.check_model, key.notes, (key.models || []).join(","),
     key.supports_openai, key.supports_anthropic, key.openai_status, key.anthropic_status, key.sort_order,
     key.api_key_masked || "", key.has_api_key ? 1 : 0, key.monitor_count || 0, key.strict_count || 0,
+    key.tags || "",
   ].join(":")).join("|");
 }

@@ -78,6 +78,12 @@
         <button class="seg" data-sort="created_desc" type="button" title="最近入库的排最前">入库↓</button>
         <button class="seg" data-sort="created_asc" type="button" title="最早入库的排最前">入库↑</button>
       </div>
+      <div class="advanced-filters" aria-label="高级筛选">
+        <select id="filter-protocol" title="协议"><option value="all">全部协议</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="both">双协议</option></select>
+        <select id="filter-adapter" title="严格验证适配器"><option value="all">全部适配器</option><option value="openai_chat">Chat</option><option value="openai_responses">Responses</option><option value="anthropic_messages">Messages</option><option value="none">未验证</option></select>
+        <select id="filter-model" title="验证模型"><option value="all">全部模型配置</option><option value="yes">已配模型</option><option value="no">未配模型</option></select>
+        <input id="filter-tag" type="search" placeholder="标签筛选" aria-label="标签筛选">
+      </div>
       <input type="search" id="filter" class="filter" placeholder="搜索 名称 / base_url / 模型…">
     </div>
   </section>
@@ -186,6 +192,8 @@
       <label><span>并发数</span><input type="number" id="set-conc" min="1" max="32"></label>
       <label><span>请求超时（秒，建议≥45）</span><input type="number" id="set-timeout" min="3" title="慢或推理型网关建议 ≥45 秒；设置过低会让可用端点在真实生成完成前超时，从而被误判为「不支持」"></label>
       <label><span>列表刷新间隔（秒，0=关闭）</span><input type="number" id="set-ui-refresh" min="0" max="3600" step="1" title="0关闭定时刷新；否则 3–3600 秒"></label>
+      <div class="seg-row"><span class="seg-row-label">定时严格验证</span><div class="seg-group" role="group" aria-label="定时严格验证"><button type="button" class="seg" id="set-strict-on">开启</button><button type="button" class="seg" id="set-strict-off">关闭</button></div></div>
+      <label><span>严格验证间隔（秒）</span><input type="number" id="set-strict-interval" min="300" max="604800"></label>
       </div>
       <p class="hint monitor-auto-save" id="monitor-save-status" aria-live="polite"></p>
     </div>
@@ -210,6 +218,7 @@
         </div>
       </label>
       <label><span>备注</span><textarea id="add-notes" rows="2" placeholder="可选备注"></textarea></label>
+      <label><span>标签</span><input type="text" id="add-tags" placeholder="例如：生产, 供应商A"></label>
       <label><span>保存后自动检测</span>
         <select id="add-check-after"><option value="1">开启</option><option value="0">关闭</option></select>
       </label>
@@ -251,6 +260,7 @@
         <input type="text" id="edit-check-path" placeholder="例如 /v1/models 或 /openai/v1/models" autocomplete="off">
       </label>
       <label><span>备注</span><textarea id="edit-notes" rows="3" placeholder="可选备注"></textarea></label>
+      <label><span>标签</span><input type="text" id="edit-tags" placeholder="逗号分隔，例如：生产, 供应商A"></label>
       <label><span>启用监测</span>
         <select id="edit-monitor"><option value="1">开启</option><option value="0">关闭</option></select>
       </label>
@@ -298,7 +308,16 @@
     <div class="model-list" id="model-list"></div>
     <div class="modal-foot">
       <button class="btn" id="btn-copy-models">复制全部</button>
+      <button class="btn soft" id="btn-refresh-models">刷新模型列表</button>
     </div>
+  </div>
+</div>
+
+<div class="modal" role="dialog" aria-modal="true" id="modal-history">
+  <div class="modal-card">
+    <div class="modal-head"><h2><span class="modal-icon" aria-hidden="true">◷</span>检测历史</h2><button class="x" data-close>✕</button></div>
+    <div class="history-summary" id="history-summary"></div>
+    <div class="history-list" id="history-list"></div>
   </div>
 </div>
 

@@ -5,6 +5,7 @@ Public facade kept stable for `import core` callers. Implementation lives in
 submodules; extension points are the registries in `core.protocols`,
 `core.export.EXPORT_FORMATS`, and `core.parse.IMPORTERS`.
 """
+from core.models_list import list_remote_models
 from core.export import (
     EXPORT_FORMATS,
     SCHEMA_VERSION,

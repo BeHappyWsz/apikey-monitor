@@ -65,6 +65,7 @@ def _normalize_import_items(data):
             "check_model": str(item.get("check_model") or item.get("model") or "").strip(),
             "check_path": str(item.get("check_path") or "").strip(),
             "notes": str(item.get("notes") or "").strip(),
+            "tags": str(item.get("tags") or "").strip(),
         })
     return out
 

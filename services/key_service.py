@@ -6,8 +6,10 @@ from services.task_service import TASKS
 
 class KeyService:
     def list(self, public=True, sort="default"): return db.list_keys(public=public, sort=sort)
-    def page(self, limit=50, cursor="", status_filter="all", search="", sort="default"):
-        return db.list_keys_page(limit, cursor, status_filter, search, sort=sort)
+    def page(self, limit=50, cursor="", status_filter="all", search="", sort="default",
+             protocol="all", adapter="all", has_model="all", tag=""):
+        return db.list_keys_page(limit, cursor, status_filter, search, sort=sort,
+                                 protocol=protocol, adapter=adapter, has_model=has_model, tag=tag)
     def get(self, key_id, public=False): return db.get_key(key_id, public=public)
     def secret(self, key_id):
         entry = db.get_key(key_id)
@@ -42,7 +44,8 @@ class KeyService:
                          result.get("openai_status"), result.get("anthropic_status"), next_check_at)
         if result.get("model_status") and result["model_status"] != "unknown":
             db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"),
-                                   result.get("model_error"), adapter=result.get("model_probe_adapter") or "")
+                                   result.get("model_error"), adapter=result.get("model_probe_adapter") or "",
+                                   next_check_at=db.strict_next_check_at(entry, settings))
 
     def _probe(self, entry, health):
         settings = self._settings()
@@ -100,31 +103,60 @@ class KeyService:
         result = self.check(key_id) if check_after else None
         return db.get_key(key_id, public=True), result
 
-    def check_model(self, key_id, model=None):
+    def _check_model_unleased(self, key_id, model=None):
         entry = db.get_key(key_id)
         if not entry:
             raise KeyError("key not found")
         model = str(model or entry.get("check_model") or "").strip()
         if not model:
             raise ValueError("no model specified")
+        settings = self._settings()
+        with TASKS.probe_slot(int(settings.get("concurrency", 8))):
+            result = core.model_check(entry["base_url"], entry["api_key"], model,
+                                      bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
+                                      int(settings.get("requestTimeoutSec", 45)))
+        if model != entry.get("check_model"):
+            db.update_key(key_id, {"check_model": model})
+            entry = {**entry, "check_model": model}
+        db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"),
+                               result.get("model_error"), adapter=result.get("model_probe_adapter") or "",
+                               next_check_at=db.strict_next_check_at(entry, settings))
+        if result.get("model_status") == "rate_limited":
+            next_check_at = db.monitor_next_check_at(entry, "rate_limited", settings)
+            # Status side-effect of strict verify does not count as a health run or duplicate history.
+            db.update_status(key_id, "rate_limited", result.get("model_latency_ms"), result.get("model_error"),
+                             next_check_at=next_check_at, bump_monitor_count=False, record_history=False)
+        return result
+
+    def check_model(self, key_id, model=None):
+        if not TASKS.acquire(key_id):
+            raise RuntimeError("key is already being checked")
+        try:
+            return self._check_model_unleased(key_id, model)
+        finally:
+            TASKS.release(key_id)
+
+    def batch_check_model(self, ids):
+        concurrency = int(self._settings().get("concurrency", 8))
+        return TASKS.create(ids, lambda key_id: self._check_model_unleased(key_id), concurrency, kind="strict")
+
+    def refresh_models(self, key_id):
+        entry = db.get_key(key_id)
+        if not entry:
+            raise KeyError("key not found")
         if not TASKS.acquire(key_id):
             raise RuntimeError("key is already being checked")
         try:
             settings = self._settings()
             with TASKS.probe_slot(int(settings.get("concurrency", 8))):
-                result = core.model_check(entry["base_url"], entry["api_key"], model,
-                                          bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
-                                          int(settings.get("requestTimeoutSec", 45)))
-            db.update_model_status(key_id, result["model_status"], result.get("model_latency_ms"),
-                                   result.get("model_error"), adapter=result.get("model_probe_adapter") or "")
-            if result.get("model_status") == "rate_limited":
-                next_check_at = db.monitor_next_check_at(entry, "rate_limited", settings)
-                # Status side-effect of strict verify ? do not count as a monitor run.
-                db.update_status(key_id, "rate_limited", result.get("model_latency_ms"), result.get("model_error"),
-                                 next_check_at=next_check_at, bump_monitor_count=False)
-            if model != entry.get("check_model"):
-                db.update_key(key_id, {"check_model": model})
-            return result
+                result = core.list_remote_models(entry["base_url"], entry["api_key"],
+                    bool(entry.get("supports_openai")), bool(entry.get("supports_anthropic")),
+                    int(settings.get("requestTimeoutSec", 45)), entry.get("check_path", ""))
+            if result.get("error") and not result.get("models"):
+                models = entry.get("models") or []
+            else:
+                models = db.update_models(key_id, result.get("models") or [])
+            return {"id": key_id, "models": models, "count": len(models), "error": result.get("error") or ""}
         finally:
             TASKS.release(key_id)
 

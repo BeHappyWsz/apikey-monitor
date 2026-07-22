@@ -132,26 +132,28 @@ export function LoadingBar() {
 const busyRegistry = new WeakMap();
 
 function setBusy(button, busy, busyLabel) {
+  const data = button.dataset || (button.dataset = {});
+  const hasClassList = Boolean(button.classList);
   if (busy) {
-    if (!button.dataset.fbIdleLabel) {
-      button.dataset.fbIdleLabel = button.textContent;
+    if (!data.fbIdleLabel) {
+      data.fbIdleLabel = button.textContent || "";
     }
-    button.classList.add("fb-busy");
+    if (hasClassList) button.classList.add("fb-busy");
     button.setAttribute("aria-busy", "true");
     button.disabled = true;
     if (busyLabel) button.textContent = busyLabel;
-    else if (!button.querySelector(".fb-spinner")) {
+    else if (button.querySelector && !button.querySelector(".fb-spinner") && button.insertAdjacentHTML) {
       button.insertAdjacentHTML("afterbegin", SPINNER_SVG);
     }
   } else {
-    button.classList.remove("fb-busy");
+    if (hasClassList) button.classList.remove("fb-busy");
     button.removeAttribute("aria-busy");
     button.disabled = false;
-    if (button.dataset.fbIdleLabel) {
+    if (data.fbIdleLabel) {
       // remove spinner if any
-      const sp = button.querySelector(".fb-spinner");
+      const sp = button.querySelector?.(".fb-spinner");
       if (sp) sp.remove();
-      button.textContent = button.dataset.fbIdleLabel;
+      button.textContent = data.fbIdleLabel;
     }
   }
 }
@@ -173,7 +175,7 @@ export function bindBusyButton(button, handler, options = {}) {
 }
 
 export function setButtonBusy(button, busy) {
-  setBusy(button, busy, button.dataset.fbBusyLabel);
+  setBusy(button, busy, button.dataset?.fbBusyLabel);
 }
 
 // ---------- BusyOverlay -----------------------------------------------------

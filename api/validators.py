@@ -27,7 +27,7 @@ def key_payload(data, partial=False):
     if not isinstance(data, dict):
         raise ValueError("json object required")
     out = {}
-    for field in ("name", "base_url", "api_key", "notes", "check_model", "check_path"):
+    for field in ("name", "base_url", "api_key", "notes", "check_model", "check_path", "tags"):
         if field in data:
             value = str(data.get(field) or "").strip()
             if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", value):
@@ -84,6 +84,8 @@ def settings_payload(data, current=None):
         "requestTimeoutSec": str(normalize_int(data.get("requestTimeoutSec", current.get("requestTimeoutSec", 45)), 45, 3, 120)),
         "autoClassifyOnAdd": "1" if str(data.get("autoClassifyOnAdd", current.get("autoClassifyOnAdd", "1"))).lower() in ("1", "true") else "0",
         "uiRefreshIntervalSec": str(_normalize_ui_refresh(data.get("uiRefreshIntervalSec", current.get("uiRefreshIntervalSec", 15)))),
+        "strictMonitorEnabled": "1" if str(data.get("strictMonitorEnabled", current.get("strictMonitorEnabled", "0"))).lower() in ("1", "true") else "0",
+        "strictIntervalSec": str(normalize_int(data.get("strictIntervalSec", current.get("strictIntervalSec", 21600)), 21600, 300, 604800)),
     }
 
 

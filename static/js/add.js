@@ -7,6 +7,7 @@ export function initAdd({ api, load, openModal, closeModal }) {
     $("#add-api-key").value = "";
     $("#add-api-key").type = "password";
     $("#add-notes").value = "";
+    $("#add-tags").value = "";
     $("#add-check-after").value = "1";
     openModal("modal-add");
     setTimeout(() => $("#add-base-url").focus(), 0);
@@ -34,6 +35,7 @@ export function initAdd({ api, load, openModal, closeModal }) {
       base_url: $("#add-base-url").value.trim(),
       api_key: $("#add-api-key").value.trim(),
       notes: $("#add-notes").value.trim(),
+      tags: $("#add-tags").value.trim(),
       check_after_save: forceCheck || $("#add-check-after").value === "1",
     };
     if (!payload.base_url || !payload.api_key) return toast("请填写 Base URL 和 API Key");
