@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 import os
 import sqlite3
 import tempfile
@@ -20,9 +21,10 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(ValueError): core.export_config({"base_url": "https://example.com", "api_key": "ok\nBAD=x"}, "codex")
 
     def test_export_quotes_values(self):
-        text = core.export_config({"base_url": "https://example.com/v1", "api_key": "a'b"}, "codex")
-        self.assertIn("OPENAI_BASE_URL='https://example.com/v1'", text)
-        self.assertIn("OPENAI_API_KEY='a'\"'\"'b'", text)
+        text = core.export_config({"base_url": "https://example.com/v1", "api_key": "a'b"}, "env")
+        self.assertIn("OPENAI_BASE_URL=", text)
+        self.assertIn("OPENAI_API_KEY=", text)
+        self.assertIn("a'b", text)
 
     def test_anthropic_401_is_auth_error(self):
         responses = [(404, "", 1, "HTTP 404"), (404, "", 1, "HTTP 404"),
@@ -236,6 +238,63 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(result["model_verified"])
         self.assertEqual(result["model_probe_adapter"], "anthropic_messages")
 
+
+    def test_ccswitch_export_claude_and_codex(self):
+        entry = {
+            "name": "My Provider",
+            "base_url": "https://api.example.com",
+            "api_key": "sk-demo",
+            "check_model": "gpt-test",
+            "model_probe_adapter": "openai_responses",
+        }
+        claude = core.export_config(entry, "claude")
+        self.assertIn('"ANTHROPIC_AUTH_TOKEN": "sk-demo"', claude)
+        self.assertIn('"ANTHROPIC_BASE_URL": "https://api.example.com/anthropic"', claude)
+        self.assertIn('"ANTHROPIC_MODEL": "gpt-test"', claude)
+        self.assertNotIn("export ANTHROPIC", claude)
+        from core.export import display_name, provider_slug
+        self.assertEqual(display_name(entry), "My Provider · gpt-test")
+        self.assertEqual(provider_slug(entry), "my_provider_gpt_test")
+        self.assertEqual(display_name({**entry, "check_model": ""}), "My Provider")
+
+        codex = core.export_config(entry, "codex")
+        codex_obj = json.loads(codex)
+        self.assertEqual(codex_obj["auth"]["OPENAI_API_KEY"], "sk-demo")
+        self.assertIn('name = "My Provider · gpt-test"', codex_obj["config"])
+        self.assertIn("[model_providers.my_provider_gpt_test]", codex_obj["config"])
+        self.assertIn('base_url = "https://api.example.com/v1"', codex_obj["config"])
+        self.assertIn('wire_api = "responses"', codex_obj["config"])
+        self.assertIn('model = "gpt-test"', codex_obj["config"])
+
+        no_model = {**entry, "check_model": ""}
+        claude_nm = core.export_config(no_model, "claude")
+        codex_nm = json.loads(core.export_config(no_model, "codex"))
+        self.assertNotIn("ANTHROPIC_MODEL", claude_nm)
+        self.assertNotIn("[general]", codex_nm["config"])
+
+        # endpoint suffix rules
+        self.assertEqual(core.claude_endpoint("https://api.example.com/anthropic"), "https://api.example.com/anthropic")
+        self.assertEqual(core.claude_endpoint("https://api.example.com"), "https://api.example.com/anthropic")
+        self.assertEqual(core.codex_endpoint("https://api.example.com/v1"), "https://api.example.com/v1")
+        self.assertEqual(core.codex_endpoint("https://api.example.com"), "https://api.example.com/v1")
+
+        link_c = core.build_ccswitch_deeplink(entry, "claude")
+        self.assertTrue(link_c.startswith("ccswitch://v1/import?"))
+        self.assertIn("resource=provider", link_c)
+        self.assertIn("app=claude", link_c)
+        self.assertIn("My%20Provider", link_c)
+        self.assertIn("gpt-test", link_c)
+        self.assertIn("endpoint=", link_c)
+        self.assertIn("apiKey=", link_c)
+        self.assertIn("model=", link_c)
+        link_nm = core.build_ccswitch_deeplink(no_model, "claude")
+        self.assertNotIn("model=", link_nm)
+
+        link_x = core.build_ccswitch_deeplink(entry, "codex")
+        self.assertTrue(link_x.startswith("ccswitch://v1/import?"))
+        self.assertIn("app=codex", link_x)
+        self.assertIn("configFormat=json", link_x)
+        self.assertIn("config=", link_x)
 
     def test_export_formats(self):
         entry = {"id": 1, "name": "demo", "base_url": "https://example.com/v1", "api_key": "sk-demo"}

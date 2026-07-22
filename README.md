@@ -19,7 +19,7 @@
 - **Web 管理**：筛选、批量检测/删除、拖拽排序、编辑、导出
 - **管理员登录与用户管理**：管理员会话、首次登录强制修改初始密码、创建账户，以及启用/禁用其他管理员账户（禁用会立即撤销其会话）
 - **批量任务**：导入/批量检测显示进度与失败数
-- **配置导出**：Claude Code、Codex CLI、`.env`、PowerShell、JSON；支持**批量 JSON**、下载文件与格式记忆
+- **配置导出**：Claude / Codex（对齐 **CC Switch** 深链与粘贴 JSON）、`.env`、PowerShell、JSON；支持**批量 JSON**、下载文件与格式记忆；卡片可一键「导入CCSwitch」
 - **体验优化**：工具栏「更多」菜单、无选中禁用批量操作、`Ctrl+Enter` 快捷保存、批量检测汇总与问题项筛选
 - **列表脱敏**：列表/详情不返回明文 Key；卡片可一键复制完整 Key（按需取 secret）
 - **JSON 备份/恢复**：备份全部为 JSON；粘贴导入可直接识别同格式 JSON
@@ -87,7 +87,7 @@ chmod +x start.sh   # 首次
 1. 打开页面 →「粘贴导入」或「手动添加」
 2. 粘贴含 `base_url` / `api_key` 的文本 →「解析预览」→ 确认 →「批量入库」
 3. 在列表查看状态、延迟、协议与模型检测结果
-4. 需要使用时点「导出」，复制 Claude Code / Codex / `.env` / JSON 等
+4. 需要使用时点「导入CCSwitch」一键打开，或「导出」复制 Claude / Codex 粘贴配置 / `.env` / JSON 等
 
 粘贴导入可混入普通说明或聊天内容：会识别环境变量、`curl`、同一行的 `URL + Key`、`Bearer` 头，以及 Markdown ````json` 代码块中的备份；只有近邻可关联的 URL 和密钥才会生成候选，降低误把对话链接或长文本当作 Key 的风险。
 
@@ -113,12 +113,15 @@ https://api.example.com sk-xxxx
 
 | 格式 | 用途 |
 |------|------|
-| Claude Code | Anthropic 环境变量 |
-| Codex CLI | OpenAI 兼容环境变量 |
-| `.env` / PowerShell | 本地脚本 |
+| Claude · CCSwitch | `{"env":{ANTHROPIC_*}}` JSON；endpoint = `base + /anthropic`；可一键深链导入 CC Switch |
+| Codex · CCSwitch | `{"auth","config"}` JSON（config 为 TOML）；endpoint = `base + /v1`；可一键深链导入 |
+| `.env` / PowerShell | 本地脚本环境变量 |
 | JSON | 单条或**批量**；字段 `name` / `base_url` / `api_key` / `check_model` / `check_path` |
 
-导出与复制会包含**完整 API Key**，注意屏幕共享与日志。
+- 卡片 **「导入CCSwitch」**：按协议能力 / 严格验证适配器自动选 Claude/Codex，打开 `ccswitch://` 深链；无法判定时弹出二选一。本机需已安装 [CC Switch](https://github.com/farion1231/cc-switch) 并注册协议。
+- **有 `check_model`** 时：写入 model，供应商展示名追加为 `名称 · 模型`（便于在 CC Switch 中区分同网关多模型）；**无 model 时整段省略**。
+- 深链为单向唤起，**无导入成功回调**；CC Switch 未响应时可在导出弹窗复制粘贴配置或复制深链。
+- 导出、复制与深链均含**完整 API Key**，注意屏幕共享、日志与勿外传深链。
 
 ## 定时监测
 

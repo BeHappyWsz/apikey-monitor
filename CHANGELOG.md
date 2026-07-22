@@ -1,41 +1,50 @@
 # Changelog
 
-## 2026-07-21
-
-### Added
-- ???????????????????????? `tbl_keys` ?? `monitor_count` / `strict_count`???????????
-
-### Changed
-- ???????????????????????????????
-
-
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 风格，版本号采用语义化版本。
 
 ## [Unreleased]
 
-相对 0.2.0 的维护与体验增强版本；包含一次会话 cookie 名变更，已部署实例的用户需重新登录一次。
+## [0.3.0] - 2026-07-22
+
+相对 [0.2.0] 的功能与体验升级版本。主要新增 **CC Switch 一键导入**（Claude / Codex），以及入库时间排序、严格验证接入建议、监测/严格验证计数等。
+
+**升级注意**
+
+- 会话 cookie 已从 `apikeyconfig_session` 重命名为 `apikeymonitor_session`：升级后浏览器旧 cookie 失效，需**重新登录一次**。
+- Claude / Codex 导出主输出改为 CC Switch 可粘贴的 **JSON**（不再是 shell `export` 片段）；需要环境变量时请继续用 `env` / `powershell`。
 
 ### Security
 
-- 会话 cookie 重命名：浏览器持有的 `apikeyconfig_session` HttpOnly cookie 在升级后即刻失效。新 cookie 名为 `apikeymonitor_session`，与项目名对齐。
+- 会话 cookie 重命名：`apikeyconfig_session` → `apikeymonitor_session`，与项目名对齐；升级后需重新登录。
 
 ### Added
 
-- 每条 Key 持久化入库时间（`created_at`，秒级 Unix 时间戳），前端卡片副标题同时显示绝对日期与相对时间（`X 分钟/小时/天前`）。已有数据库在迁移时给历史行补一个当前时间戳，避免 1970 占位
-- 列表新增 `sort` 维度：`default`（保持用户自定义顺序，兼容旧行为）、`created_desc` 与 `created_asc`（按入库时间倒序/升序）。切换排序时清空游标并从首页重新加载；非默认排序下禁用卡片拖拽（与服务端 `ORDER BY` 冲突）。`?sort=` 同时支持 `GET /api/keys` 与 `GET /api/keys/page`；游标与排序绑定，跨排序复用会被服务端拒绝为 `invalid page cursor`
-- 粘贴导入识别短词 name token（`[A-Za-z][A-Za-z0-9_-]{1,11}`，长度 2–12），落在 url/key span 之外时会作为候选 Key 的 `name` 字段
-- 严格验证成功后记录实际可用的模型调用壳（`openai_chat` / `openai_responses` / `anthropic_messages`），密钥面板据此显示 ccswitch 接入建议：可直接接入、需要 Responses/Anthropic 兼容壳，或因限流/鉴权失败暂缓接入
+- **导入到 CC Switch（Claude / Codex）**
+  - 卡片独立按钮「导入CCSwitch」：按协议能力 / 严格验证适配器自动选择 app，无法判定时二选一
+  - `GET /api/keys/{id}/export?fmt=claude|codex` 额外返回 `deeplink`（`ccswitch://v1/import?...`）
+  - Claude：粘贴 JSON `{"env":{ANTHROPIC_*}}`；endpoint = `base_url + /anthropic`（已带后缀不重复）；深链用 URL 参数
+  - Codex：粘贴 JSON `{"auth":{OPENAI_API_KEY},"config":"<toml>"}`；endpoint = `base_url + /v1`；深链用 Base64 config（含 `wire_api`）
+  - 有 `check_model` 时写入 model，并将供应商展示名追加为 `名称 · 模型` 便于区分；无 model 则整段省略
+  - 导出弹窗支持「打开 CCSwitch 导入」与「复制深链」；深链含密钥，勿外传
+- 每条 Key 持久化入库时间（`created_at`），卡片副标题显示绝对日期与相对时间；历史行迁移补时间戳
+- 列表 `sort`：`default` / `created_desc` / `created_asc`（`GET /api/keys` 与 `/page`）；非默认排序禁用拖拽
+- 粘贴导入识别短词 name token；段内就近配对 URL 与 key
+- 严格验证成功后记录 `model_probe_adapter`（`openai_chat` / `openai_responses` / `anthropic_messages`），面板显示 CC Switch 接入建议
+- 监测次数 / 严格验证次数（`monitor_count` / `strict_count`）持久化并在卡片展示
+- 可选 Redis 读缓存：分页密钥列表与 revision 短路
+- 前端交互反馈原语与弹窗收敛（busy 按钮、统一 modal 等）
 
 ### Changed
 
-- 严格模型验证增强 OpenAI-compatible 调用适配：`/chat/completions` 不可用时会回退尝试 `/responses`，并识别 `output_text` 与嵌套 `output[].content[].text` 文本响应；401/403 与 429 仍作为终止状态，不被 fallback 掩盖
-- 粘贴导入配对由"相邻 token 成对"改为"段内就近配对"：每个 `key` 取前后最近的 URL，距离相等时优先取前方 URL。同一段多个 key 共享同一 URL、以及交错成对均能正确解出；经典 `OPENAI_BASE_URL=… / OPENAI_API_KEY=…` env 形态仍然有效
-- 密钥卡片头部重排：入库时间从状态面板下移到标题下方的副标题位置，状态面板恢复 `状态 / 延迟 / 最近检测` 三项，移动端无须换行
+- 严格模型验证：OpenAI-compatible 在 `/chat/completions` 不可用时回退 `/responses`；识别 `output_text`、嵌套 text，以及仅有 reasoning 的推理型返回；401/403/429 不 fallback
+- 问题/异常筛选纳入严格模型验证相关状态
+- 密钥卡片头部与接入建议展示精简；默认排序恢复用户自定义顺序语义
 
 ### Fixed
 
-- 粘贴导入：URL 字段名前缀（如 `OPENAI_BASE_URL=`）不再被 name token 切成 `OPENAI` / `URL` 等碎片
-- 粘贴导入：URL 与未标记长 token 写在同一行时也能成对（原 `allow_unlabeled_long` 仅在 URL 出现之后的行内生效）
+- 粘贴导入：URL 字段名前缀不再被 name token 切碎；同行未标记长 token 可与 URL 成对
+- 严格验证限流状态保持与整体限流一致
+- 推理型模型严格验证假阴性减少
 
 ## [0.2.0] - 2026-07-19
 
@@ -162,7 +171,8 @@
 - JSON 导出字段精简为可移植配置：`name`、`base_url`、`api_key`、`check_model`
 - 导出弹窗布局优化
 
-[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.2.0
 [0.1.2]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.2
 [0.1.1]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.1

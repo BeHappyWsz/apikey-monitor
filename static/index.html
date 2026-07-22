@@ -311,17 +311,35 @@
     </div>
     <div class="export-toolbar">
       <select id="exp-fmt">
-        <option value="claude">Claude Code (Anthropic)</option>
-        <option value="codex">Codex CLI (OpenAI)</option>
+        <option value="claude">Claude · CCSwitch</option>
+        <option value="codex">Codex · CCSwitch</option>
         <option value="env">.env</option>
         <option value="powershell">PowerShell</option>
         <option value="json">JSON</option>
       </select>
       <button class="btn soft" id="btn-copy" type="button">⧉ 复制</button>
       <button class="btn" id="btn-download" type="button" title="下载为文件">⬇ 下载</button>
+      <button class="btn soft" id="btn-open-ccswitch" type="button" hidden title="通过深链打开 CCSwitch 导入">打开 CCSwitch</button>
+      <button class="btn ghost" id="btn-copy-deeplink" type="button" hidden title="复制深链（含密钥）">复制深链</button>
     </div>
     <p class="hint export-meta" id="exp-meta"></p>
     <textarea id="exp-text" rows="8" readonly></textarea>
+  </div>
+</div>
+
+
+<!-- CCSwitch 应用选择 -->
+<div class="modal" role="dialog" aria-modal="true" id="modal-ccswitch-app">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2><span class="modal-icon" aria-hidden="true">⇪</span>导入到 CCSwitch</h2>
+      <button class="x" data-close>✕</button>
+    </div>
+    <p class="hint">无法自动判断协议类型，请选择要导入的应用：</p>
+    <div class="export-toolbar" style="margin-top:12px">
+      <button class="btn soft" id="btn-ccswitch-claude" type="button">Claude</button>
+      <button class="btn soft" id="btn-ccswitch-codex" type="button">Codex</button>
+    </div>
   </div>
 </div>
 

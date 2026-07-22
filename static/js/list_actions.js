@@ -69,6 +69,10 @@ export function initListActions({
     if (event.target.closest(".js-edit")) return editor.openEdit(key);
     if (event.target.closest(".js-models")) return openModels(key);
     if (event.target.closest(".js-export")) return exportUi.openSingleExport(key);
+    if (event.target.closest(".js-import-ccswitch")) {
+      const trigger = event.target.closest(".js-import-ccswitch");
+      return withBusyButton(trigger, () => exportUi.importToCcswitch(key), { busyLabel: "导入中…" });
+    }
     if (event.target.closest(".js-del")) return deleteOne(key, event.target.closest(".js-del"));
     if (event.target.closest(".js-check") || event.target.closest(".js-check-model")) {
       return checkOne(key, Boolean(event.target.closest(".js-check-model")), event.target.closest(".js-check, .js-check-model"));

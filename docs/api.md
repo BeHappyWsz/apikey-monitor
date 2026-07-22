@@ -276,11 +276,18 @@ GET /api/keys/{id}/export?fmt=json
 
 ```json
 {
-  "text": "export OPENAI_BASE_URL=..."
+  "text": "{ ... }",
+  "fmt": "claude",
+  "deeplink": "ccswitch://v1/import?resource=provider&app=claude&..."
 }
 ```
 
-单条导出 `fmt` 支持：`claude`、`codex`、`env`、`powershell`、`json`。
+- `fmt` 支持：`claude`、`codex`、`env`、`powershell`、`json`。
+- `claude` / `codex` 额外返回 `deeplink`（`ccswitch://v1/import?...`），用于本机一键导入 CC Switch；其它 fmt 无该字段。
+- `claude` 文本为 `{"env":{ANTHROPIC_*}}` JSON；endpoint 为 `base_url + /anthropic`（path 已以 `/anthropic` 结尾时不重复追加）。深链以 URL 参数传递 `name` / `endpoint` / `apiKey` / 可选 `model`。
+- `codex` 文本为 `{"auth":{OPENAI_API_KEY}, "config":"<toml>"}` JSON；endpoint 为 `base_url + /v1`。 深链使用 `configFormat=json` + Base64 `config`（含 `wire_api`），并可带 endpoint/apiKey/model 覆盖参数。
+- 有 `check_model` 时：写入 model，并将展示名格式化为 `名称 · 模型`（空 name 时用 host）；无 `check_model` 则省略 model 相关字段。
+- 深链协议为单向唤起桌面端，**无导入成功回调**。深链与 `text` 均含完整密钥，勿写入日志或外传。
 
 ### 批量导出 JSON
 

@@ -165,9 +165,17 @@ def route(method, path, query, body, server, request=None):
         entry = KEYS.get(_id(match), public=False)
         if not entry: raise ApiError(404, "key_not_found", "Key 不存在")
         fmt = parse_qs(query).get("fmt", [""])[0]
-        try: text = core.export_config(entry, fmt)
-        except ValueError as exc: raise ApiError(400, "invalid_export", str(exc))
-        return 200, {"text": text}
+        try:
+            text = core.export_config(entry, fmt)
+        except ValueError as exc:
+            raise ApiError(400, "invalid_export", str(exc))
+        payload = {"text": text, "fmt": str(fmt or "").lower()}
+        if payload["fmt"] in ("claude", "codex"):
+            try:
+                payload["deeplink"] = core.build_ccswitch_deeplink(entry, payload["fmt"])
+            except ValueError as exc:
+                raise ApiError(400, "invalid_export", str(exc))
+        return 200, payload
     if method == "GET" and match and match.group(2) == "secret":
         try: return 200, KEYS.secret(_id(match))
         except KeyError: raise ApiError(404, "key_not_found", "Key 不存在")
