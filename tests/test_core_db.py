@@ -585,6 +585,16 @@ class DbTests(unittest.TestCase):
         self.assertEqual(len(ids), 1)
         self.assertNotEqual(ids[0], first)
 
+    def test_public_page_cache_key_is_compact_and_readable(self):
+        default_key = db._public_page_cache_name(12, "default", "all", "", 50, "")
+        self.assertEqual(default_key, "ak:p:12:l50")
+        filtered_key = db._public_page_cache_name(
+            12, "created_desc", "rate_limited", "Open AI", 10, "next:2",
+            protocol="openai", adapter="openai_chat", has_model="yes", tag="prod tag"
+        )
+        self.assertEqual(filtered_key, "ak:p:12:l10:scd:frl:po:aoc:my:qOpen%20AI:cnext%3A2:tprod%20tag")
+        self.assertNotIn("sha256", filtered_key.lower())
+
     def test_cursor_page_is_masked_filtered_and_has_summary(self):
         ids = [db.add_key({"name": f"key-{index}", "base_url": f"https://{index}.example", "api_key": f"sk-{index}"})
                for index in range(4)]

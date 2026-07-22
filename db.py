@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """SQLite and JSON configuration persistence."""
 import base64
-import hashlib
 import json
 import os
 import re
 import sqlite3
 import time
 from contextlib import contextmanager
+from urllib.parse import quote
 import pymysql
 import redis
 
@@ -52,10 +52,12 @@ _cache_signature = None
 _cache_retry_at = 0
 _CACHE_TTL_SECONDS = 60
 _REVISION_CACHE_TTL_SECONDS = 15
-_PUBLIC_KEY_CACHE_PREFIX = "apikey-monitor:public-key:"
-_PUBLIC_PAGE_CACHE_PREFIX = "apikey-monitor:public-page:"
-_PUBLIC_SETTINGS_CACHE_KEY = "apikey-monitor:public-settings"
-_LIST_REVISION_CACHE_KEY = "apikey-monitor:list-revision"
+_PUBLIC_KEY_CACHE_PREFIX = "ak:k:"
+_PUBLIC_PAGE_CACHE_PREFIX = "ak:p:"
+_PUBLIC_SETTINGS_CACHE_KEY = "ak:s"
+_LIST_REVISION_CACHE_KEY = "ak:r"
+_LEGACY_PUBLIC_KEY_CACHE_PREFIX = "apikey-monitor:public-key:"
+_LEGACY_PUBLIC_PAGE_CACHE_PREFIX = "apikey-monitor:public-page:"
 _TABLE_RENAMES = (
     ("keys", "tbl_keys"),
     ("settings", "tbl_settings"),
@@ -170,26 +172,43 @@ def _invalidate_public_cache():
         if client:
             names = list(client.scan_iter(f"{_PUBLIC_KEY_CACHE_PREFIX}*"))
             names.extend(client.scan_iter(f"{_PUBLIC_PAGE_CACHE_PREFIX}*"))
+            names.extend(client.scan_iter(f"{_LEGACY_PUBLIC_KEY_CACHE_PREFIX}*"))
+            names.extend(client.scan_iter(f"{_LEGACY_PUBLIC_PAGE_CACHE_PREFIX}*"))
             names.append(_PUBLIC_SETTINGS_CACHE_KEY)
             names.append(_LIST_REVISION_CACHE_KEY)
+            names.extend(("apikey-monitor:public-settings", "apikey-monitor:list-revision"))
             if names:
                 client.delete(*names)
     except Exception:
         pass
 
 
-def _cache_token(value):
-    raw = "" if value is None else str(value)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
-
-
 def _public_page_cache_name(revision, sort, status_filter, search, limit, cursor,
                             protocol="all", adapter="all", has_model="all", tag=""):
-    return (
-        f"{_PUBLIC_PAGE_CACHE_PREFIX}{revision}:{sort}:{status_filter}:"
-        f"{_cache_token(search)}:{int(limit)}:{_cache_token(cursor)}:"
-        f"{protocol}:{adapter}:{has_model}:{_cache_token(tag)}"
-    )
+    """Return a compact, human-readable cache key for a public list page."""
+    codes = {
+        "sort": {"default": "d", "created_desc": "cd", "created_asc": "ca"},
+        "status": {"all": "a", "up": "u", "down": "d", "auth_error": "ae",
+                   "rate_limited": "rl", "unknown": "x", "issue": "i", "problem": "p"},
+        "protocol": {"all": "a", "openai": "o", "anthropic": "an", "both": "b"},
+        "adapter": {"all": "a", "openai_chat": "oc", "openai_responses": "or",
+                    "anthropic_messages": "am", "none": "n"},
+        "model": {"all": "a", "yes": "y", "no": "n"},
+    }
+    parts = [f"{_PUBLIC_PAGE_CACHE_PREFIX}{revision}", f"l{int(limit)}"]
+    for label, value, default in (
+        ("s", codes["sort"].get(sort, sort), "d"),
+        ("f", codes["status"].get(status_filter, status_filter), "a"),
+        ("p", codes["protocol"].get(protocol, protocol), "a"),
+        ("a", codes["adapter"].get(adapter, adapter), "a"),
+        ("m", codes["model"].get(has_model, has_model), "a"),
+    ):
+        if value != default:
+            parts.append(f"{label}{value}")
+    for label, value in (("q", search), ("c", cursor), ("t", tag)):
+        if value:
+            parts.append(f"{label}{quote(str(value), safe='')}")
+    return ":".join(parts)
 
 
 class _MyRow(dict):
