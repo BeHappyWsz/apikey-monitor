@@ -196,3 +196,36 @@ Migrated durable tables to tbl_* names, added and backfilled the backend-only tb
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: List efficiency, CI, db split
+
+**Date**: 2026-07-22
+**Task**: List efficiency, CI, db split
+**Branch**: `main`
+
+### Summary
+
+Archived five delivered tasks. Shipped thin list payload, partial DOM card reuse, GitHub CI, and db/ package split with import db compatibility. Full unittest suite green.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9b216d9` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
