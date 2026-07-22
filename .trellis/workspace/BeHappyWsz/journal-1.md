@@ -229,3 +229,36 @@ Archived five delivered tasks. Shipped thin list payload, partial DOM card reuse
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Ship list revision SSE notifications
+
+**Date**: 2026-07-22
+**Task**: Ship list revision SSE notifications
+**Branch**: `main`
+
+### Summary
+
+Shipped authenticated list-revision SSE notifications with heartbeat recovery and a polling fallback. The native UI now marks its existing refresh prompt instead of replacing a paged or scrolled list. Added unit and integration coverage, API/design docs, and the state-management contract. The separate Vue rewrite remains deferred.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6e07ebc` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

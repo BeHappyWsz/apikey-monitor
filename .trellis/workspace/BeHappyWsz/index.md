@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~231 | Active |
+| `journal-1.md` | ~264 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-07-22 | Ship list revision SSE notifications | `6e07ebc` | `main` |
 | 6 | 2026-07-22 | List efficiency, CI, db split | `9b216d9` | `main` |
 | 5 | 2026-07-19 | Migrate settings metadata and refine admin controls | `70adb1d` | `main` |
 | 4 | 2026-07-19 | Archive Anthropic probe reliability task | `7174162` | `main` |
