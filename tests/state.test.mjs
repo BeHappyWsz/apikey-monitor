@@ -12,8 +12,8 @@ test("stale response",()=>assert.equal(isLatestResponse(1,2),false));
 test("move key before target",()=>assert.deepEqual(moveKey(keys,2,1).map(k=>k.id),[2,1]));
 test("reorder only all unfiltered",()=>assert.equal(canReorder("all",""),true));
 test("reorder disabled while filtered",()=>assert.equal(canReorder("up",""),false));
-const issueKeys=[{id:1,status:"rate_limited",name:"R"},{id:2,status:"degraded",name:"D"},{id:3,status:"up",name:"U"}];
-test("issue filtering",()=>assert.deepEqual(getVisibleKeys(issueKeys,"issue","").map(k=>k.id),[1,2]));
+const issueKeys=[{id:1,status:"rate_limited",name:"R"},{id:2,status:"degraded",name:"D"},{id:3,status:"up",name:"U"},{id:4,status:"up",name:"M",model_status:"degraded",model_verification_version:1}];
+test("issue filtering",()=>assert.deepEqual(getVisibleKeys(issueKeys,"issue","").map(k=>k.id),[1,2,4]));
 test("rate limit filtering uses overall status",()=>assert.deepEqual(getVisibleKeys(issueKeys,"rate_limited","").map(k=>k.id),[1]));
 test("fingerprint changes with status",()=>{
   const a=keysFingerprint([{id:1,status:"up",latency_ms:1}]);
@@ -30,8 +30,8 @@ test("fingerprint changes with model_probe_adapter",()=>{
   const b=keysFingerprint([{id:1,status:"up",model_status:"up",model_probe_adapter:"openai_responses"}]);
   assert.notEqual(a,b);
 });
-const problemKeys=[{id:1,status:"up",name:"U"},{id:2,status:"down",name:"D"},{id:3,status:"auth_error",name:"A"},{id:4,status:"unknown",name:"N"},{id:5,status:"rate_limited",name:"R"}];
-test("problem filtering",()=>assert.deepEqual(getVisibleKeys(problemKeys,"problem","").map(k=>k.id),[2,3,4,5]));
+const problemKeys=[{id:1,status:"up",name:"U"},{id:2,status:"down",name:"D"},{id:3,status:"auth_error",name:"A"},{id:4,status:"unknown",name:"N"},{id:5,status:"rate_limited",name:"R"},{id:6,status:"up",name:"M",model_status:"auth_error",model_verification_version:1},{id:7,status:"up",name:"UnknownModel",model_status:"unknown",model_verification_version:1}];
+test("problem filtering",()=>assert.deepEqual(getVisibleKeys(problemKeys,"problem","").map(k=>k.id),[2,3,4,5,6]));
 
 const cardState={checking:new Set(),selected:new Set(),status:"all",query:""};
 test("card shows each protocol's individual status",()=>{
@@ -63,6 +63,12 @@ test("card shows monitor and strict counts and access tag",()=>{
   assert.match(html,/直连 Chat/);
   assert.doesNotMatch(html,/接入建议/);
   assert.doesNotMatch(html,/count-chip/);
+});
+test("card marks strict model failures as access problems",()=>{
+  const html=renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",check_model:"gpt-test",model_status:"degraded",model_last_error:"HTTP 503",model_verification_version:1},cardState);
+  assert.match(html,/access-problem/);
+  assert.match(html,/不建议 异常/);
+  assert.match(html,/模型错误/);
 });
 test("access advice short labels only",()=>{
   assert.deepEqual(accessAdvice({status:"rate_limited",model_status:"up",model_verification_version:1}),

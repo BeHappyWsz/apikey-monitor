@@ -1,4 +1,4 @@
-import { canReorder } from "./state.js";
+import { canReorder, hasStrictModelIssue } from "./state.js";
 import { esc, formatCreatedAt, maskKey, relativeTime, statusLabel } from "./utils.js";
 
 const adapterLabel = {
@@ -69,9 +69,10 @@ export function renderCard(key, state) {
   const monitorCount = Number(key.monitor_count || 0);
   const strictCount = Number(key.strict_count || 0);
   const advice = accessAdvice(key);
+  const accessProblem = hasStrictModelIssue(key);
   const tone = status.replace(/_/g, "-");
   const sortable = canReorder(state.status, state.query, state.sort);
-  return `<article class="key-card status-${tone}" data-id="${key.id}" ${sortable ? 'draggable="true"' : ""}>
+  return `<article class="key-card status-${tone}${accessProblem ? " access-problem" : ""}" data-id="${key.id}" ${sortable ? 'draggable="true"' : ""}>
     <header class="card-head">
       <div class="card-title" title="${sortable ? '拖拽卡片可调整顺序' : ''}"><input class="row-sel" type="checkbox" ${state.selected.has(key.id) ? "checked" : ""} aria-label="选择 ${esc(key.name || key.base_url)}"><div><h3>${esc(key.name || "未命名 Key")}</h3><button class="url-copy js-copy-url" type="button">${esc(key.base_url)} <span>⧉</span></button><div class="card-meta" title="入库时间：${esc(formatCreatedAt(key.created_at))}"><i class="meta-dot" aria-hidden="true"></i><span>入库 ${formatCreatedAt(key.created_at)}</span><span class="meta-sep" aria-hidden="true">·</span><span>${relativeTime(key.created_at)}</span></div></div></div>
       <div class="status-panel">

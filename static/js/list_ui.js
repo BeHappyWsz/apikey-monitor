@@ -1,4 +1,4 @@
-import { getVisibleKeys, selectionSummary } from "./state.js";
+import { getVisibleKeys, hasIssueStatus, hasProblemStatus, selectionSummary } from "./state.js";
 import { renderCard, captureListUi, restoreListUi } from "./cards.js";
 import { $, $$, esc } from "./utils.js";
 
@@ -17,6 +17,10 @@ export function createListUi({ state, load, loadMore }) {
       else if (status === "rate_limited") { counts.rate_limited++; counts.issue++; counts.problem++; }
       else if (status === "degraded") { counts.issue++; counts.problem++; }
       else { counts.unknown++; counts.problem++; }
+      if (status === "up") {
+        if (hasIssueStatus(key)) counts.issue++;
+        if (hasProblemStatus(key)) counts.problem++;
+      }
     });
     return counts;
   }

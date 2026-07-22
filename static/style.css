@@ -254,6 +254,7 @@ body {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--muted);
 }
 .key-card.status-up::before { background: var(--up); box-shadow: 0 0 18px rgba(46,204,113,.5); }
+.key-card.status-up.access-problem::before { background: #fa8c16; box-shadow: 0 0 18px rgba(250,140,22,.45); }
 .key-card.status-down::before { background: var(--down); box-shadow: 0 0 18px rgba(255,92,92,.45); }
 .key-card.status-auth::before { background: var(--auth); box-shadow: 0 0 18px rgba(245,166,35,.45); }
 .key-card.status-unknown::before { background: var(--accent); }
@@ -530,6 +531,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   flex-direction: column;
   justify-content: center;
   min-height: 100%;
+}
+.key-card.access-problem .access-metric {
+  border-color: rgba(250,140,22,.42);
+  background: linear-gradient(180deg, rgba(255,247,230,.96), rgba(255,251,240,.82));
 }
 .access-state {
   display: inline-flex !important;

@@ -507,12 +507,15 @@ class DbTests(unittest.TestCase):
             db.update_status(key_id, "up" if index % 2 == 0 else "down", index + 1, "")
         db.update_model_status(ids[1], "rate_limited", 9, "model limit")
         db.update_status(ids[1], "rate_limited", 9, "model limit")
+        db.update_model_status(ids[2], "degraded", 7, "HTTP 503")
         first = db.list_keys_page(limit=2)
         self.assertEqual(len(first["items"]), 2)
         self.assertTrue(first["next_cursor"])
         self.assertEqual(first["total"], 4)
         self.assertEqual(first["summary"]["up"], 2)
         self.assertEqual(first["summary"]["rate_limited"], 1)
+        self.assertEqual(first["summary"]["issue"], 2)
+        self.assertEqual(first["summary"]["problem"], 3)
         self.assertNotIn("api_key", first["items"][0])
         second = db.list_keys_page(limit=2, cursor=first["next_cursor"])
         self.assertEqual(len(second["items"]), 2)
@@ -524,6 +527,12 @@ class DbTests(unittest.TestCase):
         rate_limited = db.list_keys_page(limit=10, status_filter="rate_limited", search="key")
         self.assertEqual(rate_limited["total"], 1)
         self.assertEqual([row["id"] for row in rate_limited["items"]], [ids[1]])
+        issue = db.list_keys_page(limit=10, status_filter="issue", search="key")
+        self.assertEqual(issue["total"], 2)
+        self.assertEqual({row["id"] for row in issue["items"]}, {ids[1], ids[2]})
+        problem = db.list_keys_page(limit=10, status_filter="problem", search="key")
+        self.assertEqual(problem["total"], 3)
+        self.assertEqual({row["id"] for row in problem["items"]}, {ids[1], ids[2], ids[3]})
 
     def test_manual_strict_rate_limit_updates_overall_status(self):
         from services.key_service import KEYS

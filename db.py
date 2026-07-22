@@ -708,9 +708,12 @@ def list_keys(public=False, sort="default"):
 
 _PAGE_STATUSES = {
     "all": (), "up": ("up",), "down": ("down",), "auth_error": ("auth_error",),
-    "rate_limited": ("rate_limited",), "unknown": ("unknown",), "issue": ("rate_limited", "degraded"),
-    "problem": ("down", "auth_error", "rate_limited", "degraded", "unknown"),
+    "rate_limited": ("rate_limited",), "unknown": ("unknown",),
 }
+
+_ISSUE_STATUSES = ("rate_limited", "degraded")
+_PROBLEM_STATUSES = ("down", "auth_error", "rate_limited", "degraded", "unknown")
+_STRICT_PROBLEM_STATUSES = ("down", "auth_error", "rate_limited", "degraded")
 
 
 _SORT_KEYS = ("default", "created_desc", "created_asc")
@@ -775,14 +778,41 @@ def _normalize_sort(sort):
     return value
 
 
+def _strict_model_condition(statuses):
+    placeholders = ",".join("?" for _ in statuses)
+    return (
+        "COALESCE(model_verification_version,0)>=1 "
+        f"AND COALESCE(model_status,'unknown') IN ({placeholders})"
+    )
+
+
+def _status_or_strict_model_condition(statuses):
+    placeholders = ",".join("?" for _ in statuses)
+    return (
+        f"(status IN ({placeholders}) OR ({_strict_model_condition(statuses)}))",
+        [*statuses, *statuses],
+    )
+
+
 def _page_conditions(status_filter="all", search=""):
-    if status_filter not in _PAGE_STATUSES:
+    if status_filter not in (*_PAGE_STATUSES.keys(), "issue", "problem"):
         raise ValueError("invalid status filter")
     conditions, values = [], []
-    statuses = _PAGE_STATUSES[status_filter]
-    if statuses:
-        conditions.append("status IN (" + ",".join("?" for _ in statuses) + ")")
-        values.extend(statuses)
+    if status_filter == "issue":
+        condition, status_values = _status_or_strict_model_condition(_ISSUE_STATUSES)
+        conditions.append(condition)
+        values.extend(status_values)
+    elif status_filter == "problem":
+        placeholders = ",".join("?" for _ in _PROBLEM_STATUSES)
+        conditions.append(
+            f"(status IN ({placeholders}) OR ({_strict_model_condition(_STRICT_PROBLEM_STATUSES)}))"
+        )
+        values.extend([*_PROBLEM_STATUSES, *_STRICT_PROBLEM_STATUSES])
+    else:
+        statuses = _PAGE_STATUSES[status_filter]
+        if statuses:
+            conditions.append("status IN (" + ",".join("?" for _ in statuses) + ")")
+            values.extend(statuses)
     term = str(search or "").strip().lower()
     if term:
         like = f"%{term}%"
@@ -797,6 +827,18 @@ def _page_summary(conn, conditions, values):
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     rows = conn.execute(f"SELECT status, COUNT(*) AS c FROM tbl_keys{where} GROUP BY status", values).fetchall()
     latency_row = conn.execute(f"SELECT AVG(latency_ms) AS average_latency_ms FROM tbl_keys{where}", values).fetchone()
+    strict_issue_row = conn.execute(
+        f"SELECT COUNT(*) AS c FROM tbl_keys{where}"
+        f"{' AND' if where else ' WHERE'} status NOT IN ({','.join('?' for _ in _ISSUE_STATUSES)}) "
+        f"AND {_strict_model_condition(_ISSUE_STATUSES)}",
+        [*values, *_ISSUE_STATUSES, *_ISSUE_STATUSES],
+    ).fetchone()
+    strict_problem_row = conn.execute(
+        f"SELECT COUNT(*) AS c FROM tbl_keys{where}"
+        f"{' AND' if where else ' WHERE'} status NOT IN ({','.join('?' for _ in _PROBLEM_STATUSES)}) "
+        f"AND {_strict_model_condition(_STRICT_PROBLEM_STATUSES)}",
+        [*values, *_PROBLEM_STATUSES, *_STRICT_PROBLEM_STATUSES],
+    ).fetchone()
     counts = {str(row["status"] or "unknown"): int(row["c"]) for row in rows}
     total = sum(counts.values())
     return {
@@ -806,8 +848,8 @@ def _page_summary(conn, conditions, values):
         "auth_error": counts.get("auth_error", 0),
         "rate_limited": counts.get("rate_limited", 0),
         "unknown": counts.get("unknown", 0),
-        "issue": counts.get("rate_limited", 0) + counts.get("degraded", 0),
-        "problem": total - counts.get("up", 0),
+        "issue": counts.get("rate_limited", 0) + counts.get("degraded", 0) + int(strict_issue_row["c"] or 0),
+        "problem": total - counts.get("up", 0) + int(strict_problem_row["c"] or 0),
         "avg_latency_ms": round(float(latency_row["average_latency_ms"])) if latency_row["average_latency_ms"] is not None else None,
     }
 

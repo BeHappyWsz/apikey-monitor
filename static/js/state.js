@@ -1,14 +1,31 @@
+const issueStatuses = new Set(["rate_limited", "degraded"]);
+const problemStatuses = new Set(["down", "auth_error", "rate_limited", "degraded", "unknown"]);
+const strictProblemStatuses = new Set(["down", "auth_error", "rate_limited", "degraded"]);
+
+export function hasStrictModelIssue(key) {
+  return Number(key?.model_verification_version || 0) >= 1
+    && strictProblemStatuses.has(key?.model_status || "unknown");
+}
+
+export function hasIssueStatus(key) {
+  return issueStatuses.has(key?.status || "unknown") || (
+    Number(key?.model_verification_version || 0) >= 1
+    && issueStatuses.has(key?.model_status || "unknown")
+  );
+}
+
+export function hasProblemStatus(key) {
+  return problemStatuses.has(key?.status || "unknown") || hasStrictModelIssue(key);
+}
+
 export function getVisibleKeys(keys, status = "all", query = "") {
   const q = String(query || "").trim().toLowerCase();
-  const issueStatuses = new Set(["rate_limited", "degraded"]);
-  // problem = not up
-  const problemStatuses = new Set(["down", "auth_error", "rate_limited", "degraded", "unknown"]);
   return keys.filter((key) => {
     const state = key.status || "unknown";
     if (status === "issue") {
-      if (!issueStatuses.has(state)) return false;
+      if (!hasIssueStatus(key)) return false;
     } else if (status === "problem") {
-      if (!problemStatuses.has(state)) return false;
+      if (!hasProblemStatus(key)) return false;
     } else if (status !== "all" && state !== status) {
       return false;
     }
