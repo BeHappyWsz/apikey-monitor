@@ -1,4 +1,4 @@
-import { getVisibleKeys, hasIssueStatus, hasProblemStatus, selectionSummary } from "./state.js";
+import { getVisibleKeys, hasIssueStatus, isHealthyOnline, selectionSummary } from "./state.js";
 import { renderCard, captureListUi, restoreListUi } from "./cards.js";
 import { $, $$, esc } from "./utils.js";
 
@@ -11,16 +11,15 @@ export function createListUi({ state, load, loadMore }) {
     const counts = { all: state.keys.length, up: 0, down: 0, auth_error: 0, rate_limited: 0, issue: 0, problem: 0, unknown: 0 };
     state.keys.forEach((key) => {
       const status = key.status || "unknown";
-      if (status === "up") counts.up++;
-      else if (status === "down") { counts.down++; counts.problem++; }
+      if (status === "up") {
+        if (isHealthyOnline(key)) counts.up++;
+        else counts.problem++;
+        if (hasIssueStatus(key)) counts.issue++;
+      } else if (status === "down") { counts.down++; counts.problem++; }
       else if (status === "auth_error") { counts.auth_error++; counts.problem++; }
       else if (status === "rate_limited") { counts.rate_limited++; counts.issue++; counts.problem++; }
       else if (status === "degraded") { counts.issue++; counts.problem++; }
       else { counts.unknown++; counts.problem++; }
-      if (status === "up") {
-        if (hasIssueStatus(key)) counts.issue++;
-        if (hasProblemStatus(key)) counts.problem++;
-      }
     });
     return counts;
   }

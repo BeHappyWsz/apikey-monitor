@@ -66,8 +66,14 @@ cursor-paged endpoint so it does not repeatedly transfer every key:
 - `cursor`: opaque value from the previous response's `next_cursor`; omit it
   for the first page. Each cursor is bound to the `sort` that produced it;
   replaying a cursor under a different `sort` returns `400 invalid_page`.
-- `status`: `all`, `up`, `down`, `auth_error`, `unknown`, `issue`, or
-  `problem`.
+- `status`: `all`, `up`, `down`, `auth_error`, `rate_limited`, `unknown`,
+  `issue`, or `problem`.
+  - `up` = connectivity `status=up` **and** no strict model problem
+    (`model_verification_version>=1` with `model_status` in
+    `down`/`auth_error`/`rate_limited`/`degraded`). Unverified models still
+    count as online when connectivity is up.
+  - `issue` / `problem` already include matching strict model failures;
+    `summary.problem` is `all - summary.up`.
 - `q`: optional case-insensitive search over the public list fields.
 - `sort`: `default` (user-defined `sort_order`, descending id as tiebreak —
   matches the pre-existing behaviour), `created_desc` (most-recently imported

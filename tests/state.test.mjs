@@ -1,9 +1,16 @@
 import test from "node:test";
 import { accessAdvice, renderCard } from "../static/js/cards.js";
 import assert from "node:assert/strict";
-import { getVisibleKeys, selectCurrentResults, selectionSummary, taskProgress, restartCandidates, isLatestResponse, moveKey, canReorder, keysFingerprint } from "../static/js/state.js";
+import { getVisibleKeys, isHealthyOnline, selectCurrentResults, selectionSummary, taskProgress, restartCandidates, isLatestResponse, moveKey, canReorder, keysFingerprint } from "../static/js/state.js";
 const keys=[{id:1,status:"up",name:"Alpha",models:["gpt-4"]},{id:2,status:"down",name:"Beta",models:[]}];
+const onlineKeys=[{id:1,status:"up",name:"Alpha",models:["gpt-4"]},{id:2,status:"down",name:"Beta",models:[]},{id:3,status:"up",name:"ModelBad",models:[],model_status:"degraded",model_verification_version:1}];
 test("visible filtering",()=>assert.deepEqual(getVisibleKeys(keys,"up","").map(k=>k.id),[1]));
+test("up filtering excludes strict model problems",()=>assert.deepEqual(getVisibleKeys(onlineKeys,"up","").map(k=>k.id),[1]));
+test("isHealthyOnline requires key and model",()=>{
+  assert.equal(isHealthyOnline({status:"up"}), true);
+  assert.equal(isHealthyOnline({status:"up",model_status:"degraded",model_verification_version:1}), false);
+  assert.equal(isHealthyOnline({status:"up",model_status:"unknown",model_verification_version:1}), true);
+});
 test("select current only",()=>assert.deepEqual([...selectCurrentResults(new Set(),[keys[0]],true)],[1]));
 test("selection summary includes hidden",()=>assert.deepEqual(selectionSummary(new Set([1,2]),[keys[0]]),{total:2,visible:1,hidden:1,resultTotal:1}));
 test("task progress",()=>assert.deepEqual(taskProgress({total:4,completed:2,status:"running"}),{percent:50,label:"2/4",terminal:false}));

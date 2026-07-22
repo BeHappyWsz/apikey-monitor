@@ -856,6 +856,13 @@ def _status_or_strict_model_condition(statuses):
     )
 
 
+def _healthy_up_condition():
+    """Connectivity up and no strict model problem (model issues are covered by issue/problem filters)."""
+    return (
+        f"status='up' AND NOT ({_strict_model_condition(_STRICT_PROBLEM_STATUSES)})",
+        list(_STRICT_PROBLEM_STATUSES),
+    )
+
 
 def normalize_tags(value):
     """Normalize free-form tags into a comma-separated string (max 20, 32 chars each)."""
@@ -907,6 +914,10 @@ def _page_conditions(status_filter="all", search="", protocol="all", adapter="al
             f"(status IN ({placeholders}) OR ({_strict_model_condition(_STRICT_PROBLEM_STATUSES)}))"
         )
         values.extend([*_PROBLEM_STATUSES, *_STRICT_PROBLEM_STATUSES])
+    elif status_filter == "up":
+        condition, status_values = _healthy_up_condition()
+        conditions.append(condition)
+        values.extend(status_values)
     else:
         statuses = _PAGE_STATUSES[status_filter]
         if statuses:
@@ -948,29 +959,30 @@ def _page_summary(conn, conditions, values):
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     rows = conn.execute(f"SELECT status, COUNT(*) AS c FROM tbl_keys{where} GROUP BY status", values).fetchall()
     latency_row = conn.execute(f"SELECT AVG(latency_ms) AS average_latency_ms FROM tbl_keys{where}", values).fetchone()
+    healthy_up_cond, healthy_up_values = _healthy_up_condition()
+    healthy_up_row = conn.execute(
+        f"SELECT COUNT(*) AS c FROM tbl_keys{where}"
+        f"{' AND' if where else ' WHERE'} {healthy_up_cond}",
+        [*values, *healthy_up_values],
+    ).fetchone()
     strict_issue_row = conn.execute(
         f"SELECT COUNT(*) AS c FROM tbl_keys{where}"
         f"{' AND' if where else ' WHERE'} status NOT IN ({','.join('?' for _ in _ISSUE_STATUSES)}) "
         f"AND {_strict_model_condition(_ISSUE_STATUSES)}",
         [*values, *_ISSUE_STATUSES, *_ISSUE_STATUSES],
     ).fetchone()
-    strict_problem_row = conn.execute(
-        f"SELECT COUNT(*) AS c FROM tbl_keys{where}"
-        f"{' AND' if where else ' WHERE'} status NOT IN ({','.join('?' for _ in _PROBLEM_STATUSES)}) "
-        f"AND {_strict_model_condition(_STRICT_PROBLEM_STATUSES)}",
-        [*values, *_PROBLEM_STATUSES, *_STRICT_PROBLEM_STATUSES],
-    ).fetchone()
     counts = {str(row["status"] or "unknown"): int(row["c"]) for row in rows}
     total = sum(counts.values())
+    healthy_up = int(healthy_up_row["c"] or 0)
     return {
         "all": total,
-        "up": counts.get("up", 0),
+        "up": healthy_up,
         "down": counts.get("down", 0),
         "auth_error": counts.get("auth_error", 0),
         "rate_limited": counts.get("rate_limited", 0),
         "unknown": counts.get("unknown", 0),
         "issue": counts.get("rate_limited", 0) + counts.get("degraded", 0) + int(strict_issue_row["c"] or 0),
-        "problem": total - counts.get("up", 0) + int(strict_problem_row["c"] or 0),
+        "problem": total - healthy_up,
         "avg_latency_ms": round(float(latency_row["average_latency_ms"])) if latency_row["average_latency_ms"] is not None else None,
     }
 

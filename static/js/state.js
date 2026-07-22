@@ -18,6 +18,11 @@ export function hasProblemStatus(key) {
   return problemStatuses.has(key?.status || "unknown") || hasStrictModelIssue(key);
 }
 
+/** Connectivity up and no strict model problem (aligned with server status_filter=up). */
+export function isHealthyOnline(key) {
+  return (key?.status || "unknown") === "up" && !hasStrictModelIssue(key);
+}
+
 export function getVisibleKeys(keys, status = "all", query = "") {
   const q = String(query || "").trim().toLowerCase();
   return keys.filter((key) => {
@@ -26,6 +31,8 @@ export function getVisibleKeys(keys, status = "all", query = "") {
       if (!hasIssueStatus(key)) return false;
     } else if (status === "problem") {
       if (!hasProblemStatus(key)) return false;
+    } else if (status === "up") {
+      if (!isHealthyOnline(key)) return false;
     } else if (status !== "all" && state !== status) {
       return false;
     }
