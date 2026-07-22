@@ -1098,32 +1098,17 @@ table.cand { min-width:650px; }
   justify-content: center;
 }
 .key-mask-line {
-  display: inline-flex !important;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  display: block !important;
   max-width: 100%;
   overflow: hidden;
   line-height: 1.45;
 }
-.key-mask-line .masked-key {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  flex: 0 1 auto;
-  font-size: 13px;
-  line-height: 1.45;
+.key-mask-line .url-copy {
+  max-width: 100%;
 }
-.key-mask-line .link-btn {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.45;
-  flex: 0 0 auto;
+.key-mask-line .url-copy span {
   margin-left: 4px;
-  padding: 0;
-  vertical-align: baseline;
+  opacity: .75;
 }
 .import-actions { flex-wrap: wrap; }
 
