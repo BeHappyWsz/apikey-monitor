@@ -976,6 +976,13 @@ table.cand { min-width:650px; }
     white-space: normal;
     overflow-wrap: anywhere;
   }
+  .primary-metric b.key-mask-line,
+  .primary-metric .url-copy,
+  .primary-metric .url-copy .masked-key,
+  .primary-metric .url-copy .copy-glyph {
+    white-space: nowrap !important;
+    overflow-wrap: normal !important;
+  }
   .card-details {
     margin: 0 14px 0 16px !important;
   }
@@ -1100,15 +1107,35 @@ table.cand { min-width:650px; }
 .key-mask-line {
   display: block !important;
   max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   line-height: 1.45;
 }
 .key-mask-line .url-copy {
+  display: inline-flex !important;
+  align-items: center;
   max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  vertical-align: bottom;
 }
-.key-mask-line .url-copy span {
+.key-mask-line .url-copy .masked-key {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.key-mask-line .url-copy .copy-glyph {
+  flex: 0 0 auto;
   margin-left: 4px;
   opacity: .75;
+}
+.primary-metric b.key-mask-line,
+.primary-metric .url-copy,
+.primary-metric .url-copy .masked-key {
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
 }
 .import-actions { flex-wrap: wrap; }
 
