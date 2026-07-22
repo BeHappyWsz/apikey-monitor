@@ -38,6 +38,7 @@ GET /api/keys
 `GET /api/keys/page` 返回的 `items[]` 为 **list 视图**（`view: "list"`）：不含 `models` 数组与 `notes` 正文，改用 `models_count` / `has_notes`。编辑、模型列表等详情操作请使用 `GET /api/keys/{id}`（`view: "full"`）。
 GET /api/keys/page?limit=50&cursor=&status=all&q=&sort=default
 GET /api/keys/revision
+GET /api/keys/events
 ```
 
 > 列表与单条详情默认脱敏：响应不含明文 `api_key`，仅含 `api_key_masked`、`has_api_key`。完整密钥见 `/secret` 或导出接口。
@@ -115,6 +116,14 @@ Refresh explicitly reloads the first page with the current filters.
 Values are `openai_chat`, `openai_responses`, `anthropic_messages`, or empty
 when no usable adapter has been confirmed. The web panel uses it to show
 ccswitch access guidance; portable JSON export intentionally excludes it.
+
+`GET /api/keys/events` is an authenticated Server-Sent Events stream. It sends
+an initial `revision` event and a later event whenever an in-process list
+mutation changes the revision, with `data: {"revision":"opaque-revision"}`.
+The browser uses the event to show its existing refresh prompt; it does not
+replace a paged or scrolled list automatically. The stream includes heartbeat
+comments and is not a replayable audit log, so reconnecting clients must still
+load the normal list endpoint.
 
 ### 新增单条
 

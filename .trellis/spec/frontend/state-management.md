@@ -101,6 +101,77 @@ without any status label changing.
 
 UI poll interval: `settings.uiRefreshIntervalSec` (`0` disables). After mutations, call `load()` (non-silent as appropriate).
 
+## Scenario: List-revision SSE refresh prompt
+
+### 1. Scope / Trigger
+
+Use this contract when a list mutation should reach an open panel sooner than
+the configured revision poll, without disrupting a paged, scrolled, selected,
+or edited list.
+
+### 2. Signatures
+
+- `GET /api/keys/events` returns authenticated `text/event-stream`.
+- Event name: `revision`; payload: `{ "revision": "opaque-revision" }`.
+- `services.list_events.notify_list_changed(revision)` broadcasts from
+  `db.touch_list_generation()` after public-list cache invalidation.
+
+### 3. Contracts
+
+- The server emits one initial revision event, sends heartbeat comments while
+  idle, and has no replay/history guarantee. `EventSource` reconnects normally.
+- `static/app.js` owns the one `EventSource`. A new revision only sets
+  `state.refreshPending` and renders the existing refresh affordance with
+  `preserveUi`; it must not fetch and replace the current page automatically.
+- Existing revision polling remains a recovery path. While SSE is connected it
+  may run less frequently; setting `uiRefreshIntervalSec=0` disables polling,
+  not SSE.
+- No secrets, key rows, or mutable list state travel through the event; the
+  normal masked page endpoint remains the source of list data.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Missing/expired session | HTTP `401 unauthenticated`, no stream |
+| Password change required | HTTP `403 password_change_required`, no stream |
+| List write changes revision | Broadcast one latest `revision` payload |
+| Idle stream | Send a comment heartbeat; do not fabricate a revision |
+| Event JSON malformed/client unsupported | Ignore it and retain revision polling |
+| Write failure after SSE headers | Close/reconnect; never append a JSON error to the stream |
+
+### 5. Good/Base/Bad Cases
+
+- Good: another tab adds a key; the current tab shows its refresh prompt and
+  retains its scroll, selection, and open modal.
+- Base: a reconnect receives the current initial revision and continues to use
+  the normal list endpoint when the operator refreshes.
+- Bad: handling a revision event with `load({ silent: true })`, which replaces
+  a partially loaded page and violates the explicit-refresh contract.
+
+### 6. Tests Required
+
+- `tests/test_list_events.py` asserts a notification advances the sequence and
+  returns the latest revision.
+- `tests/test_integration.py` asserts the endpoint rejects unauthenticated
+  access, returns `text/event-stream` after login, sends its initial revision,
+  and emits a different revision after an authenticated list write.
+- Run `node --check static/app.js`, `node --test tests/state.test.mjs`, and the
+  full Python suite after changing this path.
+
+### 7. Wrong vs Correct
+
+```javascript
+// Wrong: changes the operator's current page behind their back.
+eventSource.addEventListener("revision", () => load({ silent: true }));
+
+// Correct: keep list UI stable until an explicit refresh.
+eventSource.addEventListener("revision", () => {
+  state.refreshPending = true;
+  listUi.render({ preserveUi: true });
+});
+```
+
 ---
 
 ## HTTP helper interaction (`api.js`)

@@ -8,6 +8,7 @@
 
 - Minimal GitHub Actions CI (`.github/workflows/ci.yml`): Python unittest matrix 3.11/3.12, Node syntax checks, frontend state tests
 - List thin payload tests (`tests/test_list_thin_payload.py`) and `cardFingerprint` frontend coverage
+- Authenticated `GET /api/keys/events` SSE revision notifications with heartbeat recovery; the panel keeps its explicit refresh prompt and preserves a scrolled list
 
 ### Changed
 

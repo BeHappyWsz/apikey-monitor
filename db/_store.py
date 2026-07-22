@@ -264,6 +264,12 @@ def touch_list_generation():
     global _list_generation
     _list_generation += 1
     _invalidate_public_cache()
+    try:
+        # Fan-out to SSE listeners without making events a hard dependency of CRUD.
+        from services.list_events import notify_list_changed
+        notify_list_changed(get_list_revision())
+    except Exception:
+        pass
     return _list_generation
 
 

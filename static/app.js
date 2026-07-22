@@ -189,10 +189,16 @@ function applyUiRefreshInterval(sec) {
   }
   const n = Number(sec);
   if (!Number.isFinite(n) || n <= 0) return;
-  const ms = Math.max(3, Math.floor(n)) * 1000;
+  const baseSec = Math.max(3, Math.floor(n));
+  let lastPollAt = 0;
   uiRefreshTimer = setInterval(() => {
-    if (!document.hidden && !$(".modal.open")) load({ silent: true, poll: true }).catch(() => {});
-  }, ms);
+    if (document.hidden || $(".modal.open")) return;
+    const minGapMs = (listEventsConnected ? Math.max(baseSec, 60) : baseSec) * 1000;
+    const now = Date.now();
+    if (now - lastPollAt < minGapMs - 50) return;
+    lastPollAt = now;
+    load({ silent: true, poll: true }).catch(() => {});
+  }, 1000);
 }
 
 function applyUiRefreshFromSettings(settings) {
@@ -204,6 +210,37 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) load({ silent: true, poll: true }).catch(() => {});
 });
 
+
+let listEventSource = null;
+let listEventsConnected = false;
+
+function startListEvents() {
+  if (typeof EventSource === "undefined") return;
+  if (listEventSource) return;
+  const es = new EventSource("/api/keys/events");
+  listEventSource = es;
+  es.addEventListener("revision", (event) => {
+    listEventsConnected = true;
+    let rev = "";
+    try {
+      rev = String(JSON.parse(event.data || "{}").revision || "");
+    } catch {
+      return;
+    }
+    if (!rev || rev === state.revision) return;
+    // An event is a prompt, not a list replacement: preserve an operator's
+    // scroll position, selection, and open editor until they choose Refresh.
+    state.refreshPending = true;
+    listUi.render({ preserveUi: true });
+  });
+  es.onerror = () => {
+    listEventsConnected = false;
+  };
+  es.onopen = () => {
+    listEventsConnected = true;
+  };
+}
+
 async function bootApp() {
   try {
     const settings = await api("GET", "/api/settings");
@@ -213,6 +250,7 @@ async function bootApp() {
     applyUiRefreshInterval(15);
   }
   await load();
+  startListEvents();
 }
 
 async function boot() {

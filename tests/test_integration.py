@@ -104,6 +104,36 @@ class IntegrationTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as ctx: urllib.request.urlopen(request, timeout=2)
         self.assertEqual(ctx.exception.code, 413)
 
+    def test_sse_endpoint_requires_login_and_emits_initial_revision(self):
+        port = free_port(); self.start(port)
+        url = f"http://127.0.0.1:{port}/api/keys/events"
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(url, timeout=2)
+        self.assertEqual(ctx.exception.code, 401)
+        self.assertEqual(json.loads(ctx.exception.read())["error"], "unauthenticated")
+
+        headers = self.login_headers(port)
+        request = urllib.request.Request(url, headers={"Cookie": headers["Cookie"]})
+        with urllib.request.urlopen(request, timeout=3) as response:
+            self.assertEqual(response.status, 200)
+            self.assertTrue(response.headers["Content-Type"].startswith("text/event-stream"))
+            self.assertEqual(response.readline().decode("utf-8").strip(), "event: revision")
+            first_revision = json.loads(
+                response.readline().decode("utf-8").removeprefix("data: ").strip()
+            )["revision"]
+            self.assertTrue(first_revision)
+            self.assertEqual(response.readline().decode("utf-8"), "\n")
+
+            json_request("POST", f"http://127.0.0.1:{port}/api/keys", {
+                "name": "event test", "base_url": "https://example.com", "api_key": "sk-event",
+                "check_after_save": False,
+            }, headers)
+            self.assertEqual(response.readline().decode("utf-8").strip(), "event: revision")
+            changed_revision = json.loads(
+                response.readline().decode("utf-8").removeprefix("data: ").strip()
+            )["revision"]
+            self.assertNotEqual(changed_revision, first_revision)
+
     def test_successful_port_switch_releases_old_port(self):
         old_port, new_port = free_port(), free_port(); old_process = self.start(old_port)
         headers = self.login_headers(old_port)
