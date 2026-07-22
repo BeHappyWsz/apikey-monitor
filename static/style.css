@@ -814,10 +814,12 @@ table.cand { min-width:650px; }
   font-weight: 800;
   white-space: nowrap;
   line-height: 1.2;
+  padding-left: 4px;
 }
 .dot {
   width: 10px;
   height: 10px;
+  flex: 0 0 10px;
   background: var(--status-color);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-color) 16%, transparent);
 }
