@@ -50,7 +50,7 @@ function pagePath(cursor = "") {
   return `/api/keys/page?${params}`;
 }
 
-async function load({ silent = false, append = false } = {}) {
+async function load({ silent = false, append = false, poll = false } = {}) {
   if (append && (!state.hasMore || state.pageLoading)) return;
   if (!silent && !append) {
     state.loading = true;
@@ -61,7 +61,7 @@ async function load({ silent = false, append = false } = {}) {
   if (append) state.pageLoading = true;
   try {
     // Polling only reports a new revision; it must not jump a scrolled list.
-    if (silent && !state.checking.size) {
+    if (poll && silent && !state.checking.size) {
       try {
         const revResult = await request("GET", "/api/keys/revision", undefined, { latest: true, silent: true });
         if (!revResult.isLatest()) return;
@@ -191,7 +191,7 @@ function applyUiRefreshInterval(sec) {
   if (!Number.isFinite(n) || n <= 0) return;
   const ms = Math.max(3, Math.floor(n)) * 1000;
   uiRefreshTimer = setInterval(() => {
-    if (!document.hidden && !$(".modal.open")) load({ silent: true }).catch(() => {});
+    if (!document.hidden && !$(".modal.open")) load({ silent: true, poll: true }).catch(() => {});
   }, ms);
 }
 
@@ -201,7 +201,7 @@ function applyUiRefreshFromSettings(settings) {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) load({ silent: true }).catch(() => {});
+  if (!document.hidden) load({ silent: true, poll: true }).catch(() => {});
 });
 
 async function bootApp() {

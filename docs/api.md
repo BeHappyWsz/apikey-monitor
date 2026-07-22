@@ -33,6 +33,9 @@ http://127.0.0.1:7878
 
 ```http
 GET /api/keys
+
+
+`GET /api/keys/page` 返回的 `items[]` 为 **list 视图**（`view: "list"`）：不含 `models` 数组与 `notes` 正文，改用 `models_count` / `has_notes`。编辑、模型列表等详情操作请使用 `GET /api/keys/{id}`（`view: "full"`）。
 GET /api/keys/page?limit=50&cursor=&status=all&q=&sort=default
 GET /api/keys/revision
 ```

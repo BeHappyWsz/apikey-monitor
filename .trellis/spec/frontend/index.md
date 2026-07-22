@@ -69,3 +69,9 @@ CI example: `docs/ci.workflow.example.yml`.
 ---
 
 **Language**: Spec docs in English. UI copy may be Chinese.
+
+## List rendering
+
+- Page items may be thin (`view=list`); hydrate with `GET /api/keys/{id}` before edit/models.
+- `list_ui` patches cards by `data-id` + `cardFingerprint` instead of full `innerHTML` rebuilds.
+

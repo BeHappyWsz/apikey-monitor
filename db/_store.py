@@ -11,7 +11,7 @@ from urllib.parse import quote
 import pymysql
 import redis
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.environ.get("APIKEYCONFIG_DB_PATH", os.path.join(BASE_DIR, "data.db"))
 CONFIG_PATH = os.environ.get("APIKEYCONFIG_CONFIG_PATH", os.path.join(BASE_DIR, "config.json"))
 _FALLBACK_DEFAULTS = {
@@ -736,7 +736,12 @@ def mask_api_key(value):
     return f"{key[:5]}••••••{key[-4:]}"
 
 
-def public_key(entry, include_secret=False):
+def public_key(entry, include_secret=False, view="full"):
+    """Serialize a key for API clients.
+
+    view="list": thin list/page payload without models[] and notes body.
+    view="full": complete public record for detail/edit/export helpers.
+    """
     if not entry:
         return None
     out = dict(entry)
@@ -749,6 +754,23 @@ def public_key(entry, include_secret=False):
         out["api_key"] = secret
     else:
         out.pop("api_key", None)
+    if str(view or "full") == "list":
+        models = out.pop("models", None)
+        if isinstance(models, list):
+            out["models_count"] = len(models)
+        else:
+            out["models_count"] = 0
+        notes = out.pop("notes", None)
+        out["has_notes"] = bool(str(notes or "").strip())
+        out["view"] = "list"
+    else:
+        if "models" not in out or out.get("models") is None:
+            out["models"] = []
+        elif not isinstance(out["models"], list):
+            out["models"] = []
+        out["models_count"] = len(out["models"])
+        out["has_notes"] = bool(str(out.get("notes") or "").strip())
+        out["view"] = "full"
     return out
 
 
@@ -1051,7 +1073,7 @@ def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="de
         else:
             next_cursor = _page_cursor_encode(sort, 0,
                                              int(last.get("created_at") or 0), int(last["id"]))
-    result = {"items": [public_key(row) for row in items], "next_cursor": next_cursor,
+    result = {"items": [public_key(row, view="list") for row in items], "next_cursor": next_cursor,
               "total": total, "summary": summary, "revision": revision}
     _cache_set(cache_name, result)
     return result
@@ -1338,3 +1360,4 @@ def get_due_strict_keys(now, limit=None):
             "AND next_strict_check_at<=? ORDER BY next_strict_check_at ASC,model_last_check_at ASC,id ASC LIMIT ?",
             (int(now), cap)).fetchall()
     return [_row_to_dict(row) for row in rows]
+

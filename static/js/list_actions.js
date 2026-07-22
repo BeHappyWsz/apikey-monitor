@@ -17,7 +17,19 @@ export function initListActions({
     $$(".key-card.dragging,.key-card.drag-over").forEach((item) => item.classList.remove("dragging", "drag-over"));
   }
 
-  function openModels(key) {
+
+  async function hydrateKey(key) {
+    if (!key) return key;
+    if (key.view !== "list" && Array.isArray(key.models) && key.notes !== undefined) return key;
+    const full = await api("GET", `/api/keys/${key.id}`);
+    const merged = { ...key, ...full, view: "full" };
+    const idx = state.keys.findIndex((item) => item.id === key.id);
+    if (idx >= 0) state.keys[idx] = { ...state.keys[idx], ...merged };
+    return merged;
+  }
+
+  async function openModels(key) {
+    key = await hydrateKey(key);
     state.modelId = key.id;
     $("#model-summary").textContent = `${key.name || key.base_url}：共 ${(key.models || []).length} 个模型`;
     $("#model-list").innerHTML = (key.models || []).map((model) => `<div class="model-row"><span>${esc(model)}</span><button class="link-btn js-set-check-model" data-model="${esc(model)}">设为检测模型</button></div>`).join("") || "暂无模型";
@@ -56,7 +68,7 @@ export function initListActions({
   async function checkOne(key, modelOnly, triggerBtn) {
     if (modelOnly && !key.check_model) {
       toast("请先设置验证模型，严格验证会产生一次最小模型调用");
-      return editor.openEdit(key);
+      return editor.openEdit(await hydrateKey(key));
     }
     state.checking.add(key.id);
     render({ preserveUi: true });
@@ -85,7 +97,7 @@ export function initListActions({
         } catch { return; }
       }, { busyLabel: "复制中…" });
     }
-    if (event.target.closest(".js-edit")) return editor.openEdit(key);
+    if (event.target.closest(".js-edit")) { const full = await hydrateKey(key); return editor.openEdit(full); }
     if (event.target.closest(".js-models")) return openModels(key);
     if (event.target.closest(".js-history")) return openHistory(key);
     if (event.target.closest(".js-export")) return exportUi.openSingleExport(key);

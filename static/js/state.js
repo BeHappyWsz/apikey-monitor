@@ -97,3 +97,40 @@ export function keysFingerprint(keys) {
     key.tags || "",
   ].join(":")).join("|");
 }
+
+/** Stable fingerprint for one card ? used for partial DOM reuse. */
+export function cardFingerprint(key, state = {}) {
+  const checking = state.checking?.has?.(key.id) ? "1" : "0";
+  const selected = state.selected?.has?.(key.id) ? "1" : "0";
+  return [
+    key.id,
+    key.status,
+    key.model_status,
+    key.latency_ms,
+    key.last_check_at,
+    key.model_last_check_at,
+    key.monitor_enabled,
+    key.monitor_count,
+    key.strict_count,
+    key.openai_status,
+    key.anthropic_status,
+    key.supports_openai,
+    key.supports_anthropic,
+    key.check_model,
+    key.model_probe_adapter,
+    key.model_verification_version,
+    key.name,
+    key.base_url,
+    key.api_key_masked,
+    key.created_at,
+    key.sort_order,
+    key.models_count,
+    key.has_notes,
+    key.tags,
+    key.last_error,
+    key.model_last_error,
+    checking,
+    selected,
+  ].map((v) => (v == null ? "" : String(v))).join("|");
+}
+

@@ -4,10 +4,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Minimal GitHub Actions CI (`.github/workflows/ci.yml`): Python unittest matrix 3.11/3.12, Node syntax checks, frontend state tests
+- List thin payload tests (`tests/test_list_thin_payload.py`) and `cardFingerprint` frontend coverage
+
 ### Changed
 
+- `GET /api/keys/page` items use **list** view: omit `models[]` and `notes` body; expose `models_count` / `has_notes` / `view`
+- Frontend list rendering reuses unchanged cards by id + fingerprint (partial DOM patch); edit/models hydrate full key via `GET /api/keys/{id}`
+- Silent polling uses `poll: true` revision short-circuit; post-check silent load now refreshes page data
+- Persistence split into `db/` package (`_store` + responsibility modules: `keys`, `settings`, `auth`, `connection`, `cache`, `schema`, `config`); `import db` unchanged
 - 快捷筛选「在线」改为秘钥连通正常且模型无严格异常；模型严格验证异常仍归「异常/问题」
-
 
 ## [0.3.0] - 2026-07-22
 

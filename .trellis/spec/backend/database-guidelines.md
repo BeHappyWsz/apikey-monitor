@@ -548,3 +548,15 @@ db.add_keys_batch(items)
 - Introducing SQLAlchemy/Peewee/etc.
 - Using TaskService-style memory state for keys (keys are durable; tasks are not).
 - Changing sort semantics without updating both SQL ORDER BY and frontend `canReorder` rules.
+
+## Package layout
+
+Persistence lives in the `db/` package (`import db` unchanged):
+
+- `db/_store.py` — implementation
+- `db/keys.py`, `db/settings.py`, `db/auth.py`, `db/connection.py`, `db/cache.py`, `db/schema.py`, `db/config.py` — responsibility re-exports
+
+## Public key list view
+
+`list_keys_page` serializes items with `public_key(..., view="list")`: no `models` array or `notes` body; includes `models_count`, `has_notes`, and `view: "list"`. Full records use `view="full"` via `get_key(..., public=True)`.
+

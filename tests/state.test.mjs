@@ -1,7 +1,7 @@
 import test from "node:test";
 import { accessAdvice, renderCard } from "../static/js/cards.js";
 import assert from "node:assert/strict";
-import { getVisibleKeys, isHealthyOnline, selectCurrentResults, selectionSummary, taskProgress, restartCandidates, isLatestResponse, moveKey, canReorder, keysFingerprint } from "../static/js/state.js";
+import { getVisibleKeys, isHealthyOnline, selectCurrentResults, selectionSummary, taskProgress, restartCandidates, isLatestResponse, moveKey, canReorder, keysFingerprint, cardFingerprint } from '../static/js/state.js';
 const keys=[{id:1,status:"up",name:"Alpha",models:["gpt-4"]},{id:2,status:"down",name:"Beta",models:[]}];
 const onlineKeys=[{id:1,status:"up",name:"Alpha",models:["gpt-4"]},{id:2,status:"down",name:"Beta",models:[]},{id:3,status:"up",name:"ModelBad",models:[],model_status:"degraded",model_verification_version:1}];
 test("visible filtering",()=>assert.deepEqual(getVisibleKeys(keys,"up","").map(k=>k.id),[1]));
@@ -91,3 +91,13 @@ test("access advice short labels only",()=>{
   assert.match(accessAdvice({status:"up",check_model:"gpt",model_status:"up",model_verification_version:1,model_probe_adapter:"openai_chat"}).title, /ccswitch/);
   assert.match(renderCard({id:1,status:"up",name:"Key",base_url:"https://example.com",check_model:"gpt",model_status:"up",model_verification_version:1,model_probe_adapter:"openai_chat"},cardState), /title="[^"]*ccswitch/);
   });
+
+test("cardFingerprint changes when status changes", () => {
+  const key = { id: 1, status: "up", model_status: "unknown", latency_ms: 10 };
+  const a = cardFingerprint(key, { checking: new Set(), selected: new Set() });
+  const b = cardFingerprint({ ...key, status: "down" }, { checking: new Set(), selected: new Set() });
+  assert.notEqual(a, b);
+  const c = cardFingerprint(key, { checking: new Set([1]), selected: new Set() });
+  assert.notEqual(a, c);
+});
+

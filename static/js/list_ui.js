@@ -1,4 +1,4 @@
-import { getVisibleKeys, hasIssueStatus, isHealthyOnline, selectionSummary } from "./state.js";
+import { getVisibleKeys, hasIssueStatus, isHealthyOnline, selectionSummary, cardFingerprint } from "./state.js";
 import { renderCard, captureListUi, restoreListUi } from "./cards.js";
 import { $, $$, esc } from "./utils.js";
 
@@ -92,6 +92,64 @@ export function createListUi({ state, load, loadMore }) {
     updateBatchActions();
   }
 
+  function bindPageFooter(list) {
+    $(".js-load-more", list)?.addEventListener("click", () => loadMore());
+    $(".js-page-refresh", list)?.addEventListener("click", () => load());
+    pageObserver?.disconnect();
+    const moreButton = $(".js-load-more", list);
+    if (moreButton && "IntersectionObserver" in window) {
+      pageObserver = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadMore();
+      }, { rootMargin: "360px 0px" });
+      pageObserver.observe(moreButton);
+    }
+  }
+
+  function patchKeyList(list, rows) {
+    const existing = new Map();
+    for (const node of list.querySelectorAll(".key-card[data-id]")) {
+      existing.set(String(node.dataset.id), node);
+    }
+    const frag = document.createDocumentFragment();
+    for (const key of rows) {
+      const id = String(key.id);
+      const fp = cardFingerprint(key, state);
+      const prev = existing.get(id);
+      if (prev && prev.dataset.fp === fp) {
+        frag.appendChild(prev);
+        existing.delete(id);
+        continue;
+      }
+      const wrap = document.createElement("div");
+      wrap.innerHTML = renderCard(key, state).trim();
+      const card = wrap.firstElementChild;
+      if (card) {
+        card.dataset.fp = fp;
+        frag.appendChild(card);
+      }
+      existing.delete(id);
+    }
+    list.replaceChildren(frag);
+    if (state.total) {
+      const loadedLabel = "已加载";
+      const refreshLabel = "发现更新，刷新列表";
+      const loadingLabel = "加载中…";
+      const moreLabel = "加载更多";
+      const pending = state.refreshPending
+        ? `<button class="btn ghost js-page-refresh" type="button">${refreshLabel}</button>`
+        : "";
+      const more = state.hasMore
+        ? `<button class="btn js-load-more" type="button" ${state.pageLoading ? "disabled" : ""}>${state.pageLoading ? loadingLabel : moreLabel}</button>`
+        : "";
+      const foot = document.createElement("div");
+      foot.className = "page-load";
+      foot.dataset.pageFooter = "1";
+      foot.innerHTML = `<span>${loadedLabel} ${state.keys.length} / ${state.total}</span>${pending}${more}`;
+      list.appendChild(foot);
+    }
+    bindPageFooter(list);
+  }
+
   function render({ preserveUi = false } = {}) {
     const ui = preserveUi ? captureListUi() : null;
     renderStats();
@@ -112,20 +170,7 @@ export function createListUi({ state, load, loadMore }) {
       return;
     }
     const rows = state.keys;
-    const cards = rows.map((key) => renderCard(key, state)).join("");
-    const pending = state.refreshPending ? `<button class="btn ghost js-page-refresh" type="button">发现更新，刷新列表</button>` : "";
-    const more = state.hasMore ? `<button class="btn js-load-more" type="button" ${state.pageLoading ? "disabled" : ""}>${state.pageLoading ? "加载中…" : "加载更多"}</button>` : "";
-    list.innerHTML = cards + (state.total ? `<div class="page-load"><span>已加载 ${state.keys.length} / ${state.total}</span>${pending}${more}</div>` : "");
-    $(".js-load-more", list)?.addEventListener("click", () => loadMore());
-    $(".js-page-refresh", list)?.addEventListener("click", () => load());
-    pageObserver?.disconnect();
-    const moreButton = $(".js-load-more", list);
-    if (moreButton && "IntersectionObserver" in window) {
-      pageObserver = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) loadMore();
-      }, { rootMargin: "360px 0px" });
-      pageObserver.observe(moreButton);
-    }
+    patchKeyList(list, rows);
     if (!state.total && !Number(state.summary?.all || 0)) {
       empty.hidden = false;
       empty.querySelector(".empty-title").textContent = "还没有 Key";

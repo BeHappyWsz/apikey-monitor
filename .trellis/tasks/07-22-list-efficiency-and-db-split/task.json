@@ -1,8 +1,8 @@
 {
-  "id": "online-filter-key-and-model",
-  "name": "online-filter-key-and-model",
-  "title": "在线筛选要求秘钥与模型均正常",
-  "description": "",
+  "id": "list-efficiency-and-db-split",
+  "name": "list-efficiency-and-db-split",
+  "title": "List thin payload, partial DOM, CI, and db split",
+  "description": "Thin list payload, partial DOM patch on revision, minimal CI, db.py split by responsibility",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
