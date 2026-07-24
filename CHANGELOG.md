@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Strict model verification now uses response evidence: truncated empty completions (inish_reason/stop_reason of length/max_tokens without visible text or reasoning) are degraded with 	runcated completion; thinking-only Anthropic blocks and <think> content still count as usable evidence
+
 ### Removed
 
 - GitHub Actions CI workflow (`.github/workflows/ci.yml`) and example (`docs/ci.workflow.example.yml`); use local tests from README / CONTRIBUTING instead

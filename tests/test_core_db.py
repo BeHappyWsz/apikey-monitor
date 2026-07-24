@@ -239,6 +239,72 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["model_probe_adapter"], "anthropic_messages")
 
 
+
+    def test_strict_openai_rejects_truncated_empty_completion(self):
+        body = json.dumps({
+            "choices": [{"finish_reason": "length", "message": {"content": ""}}],
+        })
+        with patch("core.http._request", return_value=(200, body, 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "degraded")
+        self.assertFalse(result["model_verified"])
+        self.assertIn("truncated completion", result["model_error"])
+
+    def test_strict_openai_accepts_truncated_with_visible_text(self):
+        body = json.dumps({
+            "choices": [{"finish_reason": "length", "message": {"content": "OK"}}],
+        })
+        with patch("core.http._request", return_value=(200, body, 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertTrue(result["model_verified"])
+
+    def test_strict_openai_accepts_think_block_as_reasoning(self):
+        body = json.dumps({
+            "choices": [{"finish_reason": "stop", "message": {"content": "<think>plan</think>"}}],
+        })
+        with patch("core.http._request", return_value=(200, body, 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertTrue(result["model_verified"])
+
+    def test_strict_openai_responses_rejects_incomplete_empty(self):
+        body = json.dumps({"status": "incomplete", "incomplete_details": {"reason": "max_tokens"}, "output": []})
+        def fake_request(method, url, headers, body_payload, timeout):
+            if "chat/completions" in url:
+                return 404, "", 2, "HTTP 404"
+            return 200, body, 9, None
+        with patch("core.http._request", side_effect=fake_request):
+            result = core.model_check("https://example.com", "sk-test", "gpt-test", supports_openai=True)
+        self.assertEqual(result["model_status"], "degraded")
+        self.assertIn("truncated completion", result["model_error"])
+
+    def test_strict_anthropic_rejects_truncated_empty_message(self):
+        body = json.dumps({"stop_reason": "max_tokens", "content": [{"type": "text", "text": ""}]})
+        with patch("core.http._request", return_value=(200, body, 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "claude-test", supports_anthropic=True)
+        self.assertEqual(result["model_status"], "degraded")
+        self.assertIn("truncated completion", result["model_error"])
+
+    def test_strict_anthropic_accepts_thinking_only_blocks(self):
+        body = json.dumps({
+            "stop_reason": "end_turn",
+            "content": [{"type": "thinking", "thinking": "step one"}],
+        })
+        with patch("core.http._request", return_value=(200, body, 7, None)):
+            result = core.model_check("https://example.com", "sk-test", "claude-test", supports_anthropic=True)
+        self.assertEqual(result["model_status"], "up")
+        self.assertTrue(result["model_verified"])
+
+    def test_model_response_evidence_reports_flags(self):
+        from core.protocol_base import model_response_evidence
+        evidence = model_response_evidence(
+            "openai",
+            json.dumps({"choices": [{"finish_reason": "length", "message": {"content": ""}}]}),
+        )
+        self.assertFalse(evidence["ok"])
+        self.assertTrue(evidence["truncated"])
+        self.assertIn("truncated completion", evidence["error"])
     def test_ccswitch_export_claude_and_codex(self):
         entry = {
             "name": "My Provider",

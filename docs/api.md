@@ -113,6 +113,7 @@ revision only raises a refresh prompt while the user is browsing; pressing
 Refresh explicitly reloads the first page with the current filters.
 
 `model_probe_adapter` is non-secret metadata from strict model verification.
+Strict verification rejects truncated empty completions (`finish_reason`/`stop_reason` of `length`/`max_tokens` without visible text or reasoning) as degraded with a `truncated completion` error.
 Values are `openai_chat`, `openai_responses`, `anthropic_messages`, or empty
 when no usable adapter has been confirmed. The web panel uses it to show
 ccswitch access guidance; portable JSON export intentionally excludes it.
