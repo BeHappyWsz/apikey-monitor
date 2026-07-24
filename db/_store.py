@@ -7,6 +7,7 @@ import re
 import sqlite3
 import time
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from urllib.parse import quote
 import pymysql
 import redis
@@ -184,7 +185,8 @@ def _invalidate_public_cache():
 
 
 def _public_page_cache_name(revision, sort, status_filter, search, limit, cursor,
-                            protocol="all", adapter="all", has_model="all", tag=""):
+                            protocol="all", adapter="all", has_model="all", tag="",
+                            created_range="all"):
     """Return a compact, human-readable cache key for a public list page."""
     codes = {
         "sort": {"default": "d", "created_desc": "cd", "created_asc": "ca"},
@@ -194,6 +196,7 @@ def _public_page_cache_name(revision, sort, status_filter, search, limit, cursor
         "adapter": {"all": "a", "openai_chat": "oc", "openai_responses": "or",
                     "anthropic_messages": "am", "none": "n"},
         "model": {"all": "a", "yes": "y", "no": "n"},
+        "created": {"all": "a", "today": "t", "3d": "3"},
     }
     parts = [f"{_PUBLIC_PAGE_CACHE_PREFIX}{revision}", f"l{int(limit)}"]
     for label, value, default in (
@@ -202,6 +205,7 @@ def _public_page_cache_name(revision, sort, status_filter, search, limit, cursor
         ("p", codes["protocol"].get(protocol, protocol), "a"),
         ("a", codes["adapter"].get(adapter, adapter), "a"),
         ("m", codes["model"].get(has_model, has_model), "a"),
+        ("cr", codes["created"].get(created_range, created_range), "a"),
     ):
         if value != default:
             parts.append(f"{label}{value}")
@@ -209,6 +213,25 @@ def _public_page_cache_name(revision, sort, status_filter, search, limit, cursor
         if value:
             parts.append(f"{label}{quote(str(value), safe='')}")
     return ":".join(parts)
+
+
+def _local_day_start_ts(days_ago=0):
+    """Epoch seconds for local calendar midnight ``days_ago`` days before today."""
+    now = datetime.now().astimezone()
+    start = (now - timedelta(days=int(days_ago))).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(start.timestamp())
+
+
+def _created_range_start(created_range="all"):
+    created_range = str(created_range or "all").lower()
+    if created_range == "today":
+        return _local_day_start_ts(0)
+    if created_range == "3d":
+        # Inclusive last 3 local calendar days: today and the previous two.
+        return _local_day_start_ts(2)
+    if created_range in ("all", ""):
+        return None
+    raise ValueError("invalid created_range filter")
 
 
 class _MyRow(dict):
@@ -919,18 +942,22 @@ def tags_list(value):
     return [part for part in (p.strip() for p in raw.split(",")) if part]
 
 
-def _page_conditions(status_filter="all", search="", protocol="all", adapter="all", has_model="all", tag=""):
+def _page_conditions(status_filter="all", search="", protocol="all", adapter="all", has_model="all", tag="",
+                    created_range="all"):
     if status_filter not in (*_PAGE_STATUSES.keys(), "issue", "problem"):
         raise ValueError("invalid status filter")
     protocol = str(protocol or "all").lower()
     adapter = str(adapter or "all").lower()
     has_model = str(has_model or "all").lower()
+    created_range = str(created_range or "all").lower()
     if protocol not in ("all", "openai", "anthropic", "both"):
         raise ValueError("invalid protocol filter")
     if adapter not in ("all", "openai_chat", "openai_responses", "anthropic_messages", "none"):
         raise ValueError("invalid adapter filter")
     if has_model not in ("all", "yes", "no"):
         raise ValueError("invalid has_model filter")
+    if created_range not in ("all", "today", "3d"):
+        raise ValueError("invalid created_range filter")
     conditions, values = [], []
     if status_filter == "issue":
         condition, status_values = _status_or_strict_model_condition(_ISSUE_STATUSES)
@@ -980,10 +1007,14 @@ def _page_conditions(status_filter="all", search="", protocol="all", adapter="al
                           "OR LOWER(COALESCE(check_model,'')) LIKE ? OR LOWER(COALESCE(notes,'')) LIKE ? "
                           "OR LOWER(COALESCE(models,'')) LIKE ? OR LOWER(COALESCE(tags,'')) LIKE ?)")
         values.extend([like] * 6)
+    start_ts = _created_range_start(created_range)
+    if start_ts is not None:
+        conditions.append("COALESCE(created_at,0)>=?")
+        values.append(start_ts)
     return conditions, values
 
 
-def _page_summary(conn, conditions, values):
+def _page_summary(conn, conditions, values, time_base_conditions=None, time_base_values=None):
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     rows = conn.execute(f"SELECT status, COUNT(*) AS c FROM tbl_keys{where} GROUP BY status", values).fetchall()
     latency_row = conn.execute(f"SELECT AVG(latency_ms) AS average_latency_ms FROM tbl_keys{where}", values).fetchone()
@@ -1002,8 +1033,25 @@ def _page_summary(conn, conditions, values):
     counts = {str(row["status"] or "unknown"): int(row["c"]) for row in rows}
     total = sum(counts.values())
     healthy_up = int(healthy_up_row["c"] or 0)
+    tb_conditions = list(time_base_conditions if time_base_conditions is not None else conditions)
+    tb_values = list(time_base_values if time_base_values is not None else values)
+    tb_where = (" WHERE " + " AND ".join(tb_conditions)) if tb_conditions else ""
+    pool_row = conn.execute(f"SELECT COUNT(*) AS c FROM tbl_keys{tb_where}", tb_values).fetchone()
+    today_start = _created_range_start("today")
+    days3_start = _created_range_start("3d")
+    today_row = conn.execute(
+        f"SELECT COUNT(*) AS c FROM tbl_keys{tb_where}"
+        f"{' AND' if tb_where else ' WHERE'} COALESCE(created_at,0)>=?",
+        [*tb_values, today_start],
+    ).fetchone()
+    days3_row = conn.execute(
+        f"SELECT COUNT(*) AS c FROM tbl_keys{tb_where}"
+        f"{' AND' if tb_where else ' WHERE'} COALESCE(created_at,0)>=?",
+        [*tb_values, days3_start],
+    ).fetchone()
     return {
         "all": total,
+        "pool": int(pool_row["c"] or 0),
         "up": healthy_up,
         "down": counts.get("down", 0),
         "auth_error": counts.get("auth_error", 0),
@@ -1011,12 +1059,14 @@ def _page_summary(conn, conditions, values):
         "unknown": counts.get("unknown", 0),
         "issue": counts.get("rate_limited", 0) + counts.get("degraded", 0) + int(strict_issue_row["c"] or 0),
         "problem": total - healthy_up,
+        "today": int(today_row["c"] or 0),
+        "days3": int(days3_row["c"] or 0),
         "avg_latency_ms": round(float(latency_row["average_latency_ms"])) if latency_row["average_latency_ms"] is not None else None,
     }
 
 
 def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="default",
-                   protocol="all", adapter="all", has_model="all", tag=""):
+                   protocol="all", adapter="all", has_model="all", tag="", created_range="all"):
     """Return one stable-order public page without shipping the entire key list."""
     sort = _normalize_sort(sort)
     limit = max(1, min(int(limit), 100))
@@ -1027,15 +1077,17 @@ def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="de
     adapter = str(adapter or "all")
     has_model = str(has_model or "all")
     tag = "" if tag is None else str(tag)
+    created_range = str(created_range or "all")
     revision = get_list_revision()
     cache_name = _public_page_cache_name(
-        revision, sort, status_filter, search, limit, cursor, protocol, adapter, has_model, tag
+        revision, sort, status_filter, search, limit, cursor, protocol, adapter, has_model, tag, created_range
     )
     cached = _cache_get(cache_name)
     if cached is not None:
         return cached
-    facet_conditions, facet_values = _page_conditions("all", search, protocol, adapter, has_model, tag)
-    base_conditions, base_values = _page_conditions(status_filter, search, protocol, adapter, has_model, tag)
+    time_base_conditions, time_base_values = _page_conditions("all", search, protocol, adapter, has_model, tag, "all")
+    facet_conditions, facet_values = _page_conditions("all", search, protocol, adapter, has_model, tag, created_range)
+    base_conditions, base_values = _page_conditions(status_filter, search, protocol, adapter, has_model, tag, created_range)
     cursor_parts = _page_cursor_decode(cursor, expected_sort=sort)
     conditions, values = list(base_conditions), list(base_values)
     order_by = _page_order_by(sort)
@@ -1064,7 +1116,7 @@ def list_keys_page(limit=50, cursor="", status_filter="all", search="", sort="de
         rows = [_row_to_dict(row) for row in conn.execute(
             f"SELECT * FROM tbl_keys{where} ORDER BY {order_by} LIMIT ?",
             [*values, limit + 1]).fetchall()]
-        summary = _page_summary(conn, facet_conditions, facet_values)
+        summary = _page_summary(conn, facet_conditions, facet_values, time_base_conditions, time_base_values)
         total_row = conn.execute(f"SELECT COUNT(*) AS c FROM tbl_keys{base_where}", base_values).fetchone()
         total = int(total_row["c"])
     has_more = len(rows) > limit

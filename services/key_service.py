@@ -7,9 +7,10 @@ from services.task_service import TASKS
 class KeyService:
     def list(self, public=True, sort="default"): return db.list_keys(public=public, sort=sort)
     def page(self, limit=50, cursor="", status_filter="all", search="", sort="default",
-             protocol="all", adapter="all", has_model="all", tag=""):
+             protocol="all", adapter="all", has_model="all", tag="", created_range="all"):
         return db.list_keys_page(limit, cursor, status_filter, search, sort=sort,
-                                 protocol=protocol, adapter=adapter, has_model=has_model, tag=tag)
+                                 protocol=protocol, adapter=adapter, has_model=has_model, tag=tag,
+                                 created_range=created_range)
     def get(self, key_id, public=False): return db.get_key(key_id, public=public)
     def secret(self, key_id):
         entry = db.get_key(key_id)

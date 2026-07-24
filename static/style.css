@@ -170,47 +170,58 @@ body {
 .toolbar {
   position: relative;
   z-index: 60;
-  display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap;
-  margin: 0 0 12px; padding: 10px; background: rgba(255,255,255,.72);
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 0 0 12px; padding: 12px; background: rgba(255,255,255,.72);
   border: 1px solid var(--border); border-radius: 14px; backdrop-filter: blur(8px);
   overflow: visible;
 }
-.toolbar-main {
-  display: flex; gap: 8px; align-items: center; flex-wrap: nowrap;
-  flex: 1 1 auto; min-width: min(100%, 340px);
+.toolbar-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  width: 100%; min-width: 0; box-sizing: border-box;
 }
-.toolbar-filters {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 8px;
-  row-gap: 8px;
-  align-items: stretch;
-  flex: 1 1 780px;
-  width: min(100%, 880px);
-  min-width: min(100%, 680px);
-  max-width: 100%;
-  margin-left: auto;
+/* Row 1: actions on the left, search on the right */
+.toolbar-actions { justify-content: space-between; }
+.toolbar-main {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  flex: 1 1 auto; min-width: 0;
+}
+.toolbar-actions > .filter {
+  flex: 0 1 320px; width: auto; min-width: 180px; max-width: 100%;
   box-sizing: border-box;
+}
+/* Row 2: primary status filter — full-width prominent segment control */
+.toolbar-status { justify-content: flex-start; }
+/* Row 3: secondary controls — de-emphasized, right-aligned, smaller */
+.toolbar-secondary {
+  justify-content: flex-end; gap: 8px;
+  padding-top: 9px; border-top: 1px dashed var(--border);
 }
 .status-filter {
-  display: flex; flex-wrap: nowrap; gap: 3px; padding: 3px; border: 1px solid var(--border);
+  display: inline-flex; flex-wrap: nowrap; gap: 3px; padding: 3px; border: 1px solid var(--border);
   border-radius: 10px; background: var(--panel2);
-  width: 100%; max-width: none; overflow: visible; min-width: 0;
+  width: max-content; max-width: 100%; overflow: visible; min-width: 0;
   box-sizing: border-box; align-items: center;
+  flex: 0 1 auto;
 }
 .sort-filter {
-  display: inline-flex; flex-wrap: nowrap; width: auto; max-width: none;
-  overflow: visible; white-space: nowrap;
+  display: inline-flex; flex-wrap: nowrap; width: max-content; max-width: 100%;
+  overflow: visible; white-space: nowrap; flex: 0 0 auto;
 }
-.toolbar-filters > .filter {
-  grid-column: 1 / -1;
+#status-filter {
   width: 100%;
-  min-width: 0;
-  max-width: none;
-  box-sizing: border-box;
+  max-width: 100%;
+  flex: 1 1 100%;
+  justify-content: flex-start;
 }
-.advanced-filters { grid-column: 1 / -1; display: flex; gap: 8px; min-width: 0; }
-.advanced-filters select, .advanced-filters input { min-width: 0; flex: 1 1 0; }
+#status-filter .seg { flex: 1 1 auto; justify-content: center; }
+/* Secondary row: de-emphasized time/sort segments so status stays dominant */
+.toolbar-secondary .sort-filter .seg { font-size: 13px; padding: 5px 8px; }
+.advanced-filters {
+  display: flex; gap: 8px; min-width: 0; flex: 0 1 auto;
+  align-items: center; flex-wrap: wrap; justify-content: flex-end;
+}
+.advanced-filters select { min-width: 0; flex: 0 1 auto; width: auto; font-size: 13px; padding: 6px 8px; }
+.advanced-filters input { min-width: 0; flex: 0 1 140px; font-size: 13px; padding: 6px 8px; }
 .history-list { display: grid; gap: 6px; max-height: 420px; overflow: auto; }
 .history-row { display: grid; grid-template-columns: 72px 72px 68px 1fr; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
 .history-row small { grid-column: 1 / -1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -520,13 +531,15 @@ table.cand input { padding: 4px 6px; }
   .top-actions { width: 100%; justify-content: space-between; }
   .top-settings-group { flex: 1 1 auto; }
   .top-account-group { flex: 0 0 auto; }
-  .toolbar { padding: 10px 12px; flex-wrap: wrap; }
+  .toolbar { padding: 10px 12px; }
+  .toolbar-actions { flex-direction: column; align-items: stretch; }
   .toolbar-main { width: 100%; flex: 1 1 100%; flex-wrap: wrap; }
-  .toolbar-filters { width: 100%; max-width: none; min-width: 0; margin-left: 0; flex: 1 1 100%; }
-  .status-filter { width: 100%; max-width: none; overflow: visible; }
-  .sort-filter { width: auto; align-self: flex-start; }
-  .filter { width: 100%; min-width: 0; max-width: none; }
-  .advanced-filters { flex-wrap: wrap; }
+  .toolbar-actions > .filter { flex: 1 1 100%; width: 100%; min-width: 0; max-width: none; }
+  .toolbar-secondary { justify-content: flex-start; }
+  .status-filter { width: max-content; max-width: 100%; overflow: visible; }
+  .sort-filter { width: max-content; max-width: 100%; flex: 0 0 auto; }
+  #status-filter { width: 100%; max-width: 100%; }
+  .advanced-filters { flex-wrap: wrap; width: 100%; justify-content: flex-start; }
   .advanced-filters select, .advanced-filters input { flex: 1 1 calc(50% - 4px); min-height: 40px; }
   .list-wrap { padding: 0 12px 28px; }
   .key-list { grid-template-columns: 1fr; }
@@ -632,14 +645,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .stats { grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
   .stat-card { min-height:54px; padding:7px 10px 7px 15px; }
   .stat-card b { font-size:clamp(22px,4vw,26px); }
-  .toolbar { position:relative; z-index:60; padding:10px; gap:9px; overflow:visible; flex-wrap:wrap; }
+  .toolbar { position:relative; z-index:60; padding:10px; gap:9px; overflow:visible; }
   .toolbar-main { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; flex-wrap:wrap; }
   .toolbar-main .btn { min-height:44px; }
   .toolbar-main .more-menu { grid-column: span 1; }
   .more-dropdown { left: auto; right: 0; min-width: min(220px, 70vw); }
   .select-all { grid-column:1/-1; min-height:44px; }
-  .toolbar-filters { gap:8px; width:100%; max-width:none; }
-  .status-filter { overflow:visible; }
+  .toolbar-secondary { gap:8px; width:100%; justify-content:flex-start; }
+  .status-filter { overflow:visible; width:max-content; max-width:100%; }
+  #status-filter { width:100%; max-width:100%; }
   .seg { min-height:40px; white-space:nowrap; }
   .filter { min-width:0 !important; min-height:44px; width:100%; }
   .list-wrap { padding:0 0 82px; }

@@ -13,7 +13,14 @@ export function initAdd({ api, load, openModal, closeModal }) {
     setTimeout(() => $("#add-base-url").focus(), 0);
   };
 
-  $("#btn-add")?.addEventListener("click", () => withBusyButton($("#btn-add"), open, { busyLabel: "打开中…" }));
+  $("#btn-add")?.addEventListener("click", () => withBusyButton($("#btn-add"), () => {
+    // Close the "更多" menu when opened from the dropdown item.
+    const menu = $("#more-dropdown");
+    const btn = $("#btn-more");
+    if (menu) menu.hidden = true;
+    if (btn) btn.setAttribute("aria-expanded", "false");
+    open();
+  }, { busyLabel: "打开中…" }));
   $("#btn-empty-add")?.addEventListener("click", () => withBusyButton($("#btn-empty-add"), open, { busyLabel: "打开中…" }));
   $("#btn-toggle-add-key")?.addEventListener("click", () => withBusyButton($("#btn-toggle-add-key"), () => {
     $("#add-api-key").type = $("#add-api-key").type === "password" ? "text" : "password";

@@ -29,7 +29,7 @@ const state = {
   fingerprint: "",
   revision: "",
   nextCursor: "", hasMore: false, total: 0, summary: {}, pageLoading: false, refreshPending: false,
-  filters: { protocol: "all", adapter: "all", has_model: "all", tag: "" },
+  filters: { protocol: "all", adapter: "all", has_model: "all", tag: "", created_range: "all" },
 };
 
 async function api(method, path, body, options) {
@@ -150,6 +150,17 @@ $("#status-filter").addEventListener("click", (event) => {
   const button = event.target.closest(".seg");
   if (button && button.dataset.status !== state.status) { state.status = button.dataset.status; load(); }
 });
+$("#created-filter")?.addEventListener("click", (event) => {
+  const button = event.target.closest(".seg");
+  if (!button) return;
+  const next = button.dataset.created || "all";
+  if (next === (state.filters.created_range || "all")) return;
+  state.filters = { ...state.filters, created_range: next };
+  state.nextCursor = "";
+  state.hasMore = false;
+  $$("#created-filter .seg").forEach((item) => item.classList.toggle("active", item.dataset.created === next));
+  load();
+});
 $("#sort-filter").addEventListener("click", (event) => {
   const button = event.target.closest(".seg");
   if (!button) return;
@@ -168,6 +179,7 @@ function applyAdvancedFilters() {
     adapter: $("#filter-adapter").value,
     has_model: $("#filter-model").value,
     tag: $("#filter-tag").value.trim(),
+    created_range: state.filters.created_range || "all",
   };
   state.nextCursor = "";
   state.hasMore = false;

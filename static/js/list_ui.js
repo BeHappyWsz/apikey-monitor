@@ -6,9 +6,9 @@ export function createListUi({ state, load, loadMore }) {
   let pageObserver = null;
   function countStatuses() {
     if (state.summary && Object.keys(state.summary).length) {
-      return { all: 0, up: 0, down: 0, auth_error: 0, rate_limited: 0, issue: 0, problem: 0, unknown: 0, ...state.summary };
+      return { all: 0, up: 0, down: 0, auth_error: 0, rate_limited: 0, issue: 0, problem: 0, unknown: 0, today: 0, days3: 0, ...state.summary };
     }
-    const counts = { all: state.keys.length, up: 0, down: 0, auth_error: 0, rate_limited: 0, issue: 0, problem: 0, unknown: 0 };
+    const counts = { all: state.keys.length, up: 0, down: 0, auth_error: 0, rate_limited: 0, issue: 0, problem: 0, unknown: 0, today: 0, days3: 0 };
     state.keys.forEach((key) => {
       const status = key.status || "unknown";
       if (status === "up") {
@@ -52,11 +52,14 @@ export function createListUi({ state, load, loadMore }) {
     for (const [key, id] of Object.entries({
       all: "cnt-all", up: "cnt-up", down: "cnt-down", auth_error: "cnt-auth",
       rate_limited: "cnt-rate-limited", issue: "cnt-issue", problem: "cnt-problem", unknown: "cnt-unknown",
+      today: "cnt-today", days3: "cnt-days3",
     })) {
       const el = $("#" + id);
-      if (el) el.textContent = counts[key];
+      if (el) el.textContent = counts[key] || 0;
     }
     $$("#status-filter .seg").forEach((button) => button.classList.toggle("active", button.dataset.status === state.status));
+    const created = state.filters?.created_range || "all";
+    $$("#created-filter .seg").forEach((button) => button.classList.toggle("active", button.dataset.created === created));
   }
 
   function setBtnDisabled(el, disabled, titleWhenDisabled) {
@@ -71,7 +74,7 @@ export function createListUi({ state, load, loadMore }) {
     const hasSel = state.selected.size > 0;
     // `total` is scoped to the active server-side filter. Backup remains
     // available when that filter has no matches but the account still has keys.
-    const hasKeys = Number(state.summary?.all || 0) > 0;
+    const hasKeys = Number((state.summary?.pool ?? state.summary?.all) || 0) > 0;
     setBtnDisabled($("#btn-check"), !hasSel, "请先勾选要检测的项目");
     setBtnDisabled($("#btn-export-selected"), !hasSel, "请先勾选要导出的项目");
     setBtnDisabled($("#btn-delete"), !hasSel, "请先勾选要删除的项目");

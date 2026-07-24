@@ -452,7 +452,7 @@ GET /api/sync/status
 GET /api/settings
 ```
 
-`GET /api/keys/page` additionally accepts optional `protocol` (`all|openai|anthropic|both`), `adapter` (`all|openai_chat|openai_responses|anthropic_messages|none`), `has_model` (`all|yes|no`), and exact `tag` filters. List rows expose normalized `tags` plus `tag_list`, never a plaintext API key.
+`GET /api/keys/page` additionally accepts optional `protocol` (`all|openai|anthropic|both`), `adapter` (`all|openai_chat|openai_responses|anthropic_messages|none`), `has_model` (`all|yes|no`), exact `tag`, and `created_range` (`all|today|3d`, local calendar days by `created_at`) filters. `summary` includes `today` / `days3` for the current non-time filters, and `pool` for the same non-time base without the active `created_range`. List rows expose normalized `tags` plus `tag_list`, never a plaintext API key.
 
 ### 检测历史与模型刷新
 

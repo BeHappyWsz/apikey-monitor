@@ -140,7 +140,8 @@ def route(method, path, query, body, server, request=None):
                                   protocol=params.get("protocol", ["all"])[0],
                                   adapter=params.get("adapter", ["all"])[0],
                                   has_model=params.get("has_model", ["all"])[0],
-                                  tag=params.get("tag", [""])[0])
+                                  tag=params.get("tag", [""])[0],
+                                  created_range=params.get("created_range", ["all"])[0])
         except ValueError as exc:
             raise ApiError(400, "invalid_page", str(exc))
     if method == "GET" and path == "/api/keys/revision":

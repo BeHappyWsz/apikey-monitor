@@ -922,6 +922,44 @@ class DbTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid page cursor"):
             db.list_keys_page(cursor="WzAsLTEsMV0", sort="created_desc")
 
+    def test_created_range_today_and_three_days(self):
+        import time
+        from datetime import datetime, timedelta
+        from db import _store as store
+
+        now = datetime.now().astimezone()
+        today_start = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+        yesterday = today_start - 12 * 3600
+        three_days_ago = today_start - 2 * 86400 + 3600  # still within inclusive 3 local days
+        older = today_start - 10 * 86400
+
+        ids = []
+        for stamp in (int(time.time()), yesterday, three_days_ago, older):
+            key_id = db.add_key({
+                "name": f"range-{stamp}",
+                "base_url": f"https://range-{stamp}.example",
+                "api_key": f"sk-{stamp}",
+            })
+            with db.connection(write=True) as conn:
+                conn.execute("UPDATE tbl_keys SET created_at=? WHERE id=?", (stamp, key_id))
+            ids.append(key_id)
+
+        today_page = db.list_keys_page(limit=50, created_range="today")
+        self.assertTrue(all(int(item["created_at"]) >= today_start for item in today_page["items"]))
+        self.assertEqual(today_page["total"], today_page["summary"]["today"])
+        self.assertGreaterEqual(today_page["summary"]["days3"], today_page["summary"]["today"])
+        self.assertEqual(today_page["summary"]["pool"], 4)
+
+        days3_page = db.list_keys_page(limit=50, created_range="3d")
+        days3_start = store._created_range_start("3d")
+        self.assertTrue(all(int(item["created_at"]) >= days3_start for item in days3_page["items"]))
+        self.assertEqual(days3_page["total"], days3_page["summary"]["days3"])
+        self.assertEqual({item["id"] for item in days3_page["items"]}, set(ids[:3]))
+
+        with self.assertRaisesRegex(ValueError, "invalid created_range filter"):
+            db.list_keys_page(created_range="week")
+
+
     def test_legacy_private_setting_keys_migrate_to_camel_case(self):
         with db.connection(write=True) as conn:
             conn.executemany("INSERT INTO tbl_settings(k,v,name) VALUES(?,?,?)", [
