@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-24
+
 ### Added
 
 - Minimal GitHub Actions CI (`.github/workflows/ci.yml`): Python unittest matrix 3.11/3.12, Node syntax checks, frontend state tests
@@ -12,6 +14,7 @@
 
 ### Changed
 
+- 列表工具栏重构为三层布局：第一行操作按钮 + 搜索，第二行状态筛选拉满整行为主控件，第三行时间 / 排序 / 高级筛选弱化右对齐；保留全部控件 ID 与 `.seg` 类，筛选与排序逻辑不变
 - `GET /api/keys/page` items use **list** view: omit `models[]` and `notes` body; expose `models_count` / `has_notes` / `view`
 - Frontend list rendering reuses unchanged cards by id + fingerprint (partial DOM patch); edit/models hydrate full key via `GET /api/keys/{id}`
 - Silent polling uses `poll: true` revision short-circuit; post-check silent load now refreshes page data
@@ -185,7 +188,8 @@
 - JSON 导出字段精简为可移植配置：`name`、`base_url`、`api_key`、`check_model`
 - 导出弹窗布局优化
 
-[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/BeHappyWsz/apikey-monitor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.2.0
 [0.1.2]: https://github.com/BeHappyWsz/apikey-monitor/releases/tag/v0.1.2
