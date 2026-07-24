@@ -1,4 +1,4 @@
-﻿# API Key 配置与监测面板
+# API Key 配置与监测面板
 
 [![Release](https://img.shields.io/github/v/release/BeHappyWsz/apikey-monitor?display_name=tag)](https://github.com/BeHappyWsz/apikey-monitor/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
