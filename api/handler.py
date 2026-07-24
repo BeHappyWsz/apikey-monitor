@@ -17,9 +17,20 @@ from version import USER_AGENT
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
-# Client closed the socket while we were writing a response.
-# On Windows this commonly surfaces as ConnectionAbortedError (WinError 10053).
+# Client closed the socket while reading a request or writing a response.
+# On Windows this commonly surfaces as ConnectionAbortedError (WinError 10053)
+# when the browser navigates away, refreshes, or drops an SSE stream.
 _CLIENT_DISCONNECT = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+_WIN_CLIENT_DISCONNECT = frozenset({10053, 10054})  # WSAECONNABORTED / WSAECONNRESET
+
+
+def is_client_disconnect(exc):
+    """True when the peer aborted the TCP connection mid-request."""
+    if isinstance(exc, _CLIENT_DISCONNECT):
+        return True
+    if isinstance(exc, OSError) and getattr(exc, "winerror", None) in _WIN_CLIENT_DISCONNECT:
+        return True
+    return False
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -27,6 +38,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass
+
+    def handle_one_request(self):
+        # BaseHTTPRequestHandler only swallows TimeoutError around readline();
+        # browser aborts during the request-line read raise ConnectionAbortedError
+        # and would otherwise dump a full traceback via ThreadingHTTPServer.
+        try:
+            super().handle_one_request()
+        except _CLIENT_DISCONNECT:
+            self.close_connection = True
+
+    def finish(self):
+        try:
+            super().finish()
+        except _CLIENT_DISCONNECT:
+            pass
 
     def _json(self, value, status=200, extra_headers=None):
         raw = json.dumps(value, ensure_ascii=False).encode("utf-8")

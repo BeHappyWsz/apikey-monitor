@@ -10,7 +10,7 @@ from http.server import ThreadingHTTPServer
 
 import db
 import monitor
-from api.handler import Handler
+from api.handler import Handler, is_client_disconnect
 from services import instance as instance_svc
 from services.auth_service import AUTH
 
@@ -18,6 +18,13 @@ from services.auth_service import AUTH
 class AppServer(ThreadingHTTPServer):
     allow_reuse_address = True
     daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        # Quiet common peer-abort noise (refresh / closed tab / SSE drop).
+        _, exc, _ = sys.exc_info()
+        if is_client_disconnect(exc):
+            return
+        super().handle_error(request, client_address)
 
 
 def main(argv=None):
