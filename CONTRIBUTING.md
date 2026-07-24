@@ -1,4 +1,4 @@
-# 贡献指南
+﻿# 贡献指南
 
 感谢你愿意改进 **apiKeyConfig**。本项目目标是保持小而专注：本地运行、固定且明确的运行依赖、开箱即用。
 
@@ -11,7 +11,7 @@
 ```bash
 python -m pip install -r requirements.txt
 python app.py
-python -m unittest discover -s tests -v
+python -m python -m unittest discover -s tests -v
 node --check static/app.js
 node --test tests/state.test.mjs
 ```

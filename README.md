@@ -1,4 +1,4 @@
-# API Key 配置与监测面板
+﻿# API Key 配置与监测面板
 
 [![Release](https://img.shields.io/github/v/release/BeHappyWsz/apikey-monitor?display_name=tag)](https://github.com/BeHappyWsz/apikey-monitor/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -202,7 +202,7 @@ https://api.example.com sk-xxxx
 
 > 安全提示：共享坚果云账号即共享全部 Key；建议使用可吊销的**应用密码**；优先 HTTPS。下载的条目初始为「未知」状态，定时监测会在下个周期自动检测。同一云端文件同时只允许一台设备写入。
 
-## 开发与测试
+## 本地开发与测试（可选）
 
 ```bash
 # Python 测试
