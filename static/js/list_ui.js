@@ -97,7 +97,6 @@ export function createListUi({ state, load, loadMore }) {
 
   function bindPageFooter(list) {
     $(".js-load-more", list)?.addEventListener("click", () => loadMore());
-    $(".js-page-refresh", list)?.addEventListener("click", () => load());
     pageObserver?.disconnect();
     const moreButton = $(".js-load-more", list);
     if (moreButton && "IntersectionObserver" in window) {
@@ -135,26 +134,29 @@ export function createListUi({ state, load, loadMore }) {
     list.replaceChildren(frag);
     if (state.total) {
       const loadedLabel = "已加载";
-      const refreshLabel = "发现更新，刷新列表";
       const loadingLabel = "加载中…";
       const moreLabel = "加载更多";
-      const pending = state.refreshPending
-        ? `<button class="btn ghost js-page-refresh" type="button">${refreshLabel}</button>`
-        : "";
       const more = state.hasMore
         ? `<button class="btn js-load-more" type="button" ${state.pageLoading ? "disabled" : ""}>${state.pageLoading ? loadingLabel : moreLabel}</button>`
         : "";
       const foot = document.createElement("div");
       foot.className = "page-load";
       foot.dataset.pageFooter = "1";
-      foot.innerHTML = `<span>${loadedLabel} ${state.keys.length} / ${state.total}</span>${pending}${more}`;
+      foot.innerHTML = `<span>${loadedLabel} ${state.keys.length} / ${state.total}</span>${more}`;
       list.appendChild(foot);
     }
     bindPageFooter(list);
   }
 
+  function renderRefreshFlag() {
+    const flag = $("#refresh-flag");
+    if (!flag) return;
+    flag.hidden = !state.refreshPending;
+  }
+
   function render({ preserveUi = false } = {}) {
     const ui = preserveUi ? captureListUi() : null;
+    renderRefreshFlag();
     renderStats();
     renderFilterCounts();
     const list = $("#key-list");

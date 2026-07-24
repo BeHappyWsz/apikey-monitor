@@ -191,6 +191,7 @@ $("#filter-tag").addEventListener("input", () => {
   filterTimer = setTimeout(applyAdvancedFilters, 260);
 });
 $("#btn-refresh").addEventListener("click", () => { exportUi.closeMoreMenu(); load(); });
+$("#refresh-flag")?.addEventListener("click", () => { load(); });
 
 let uiRefreshTimer = null;
 
